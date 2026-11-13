@@ -1,0 +1,38 @@
+name: SSI Live Capture
+on:
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: Comma-separated HOSE symbols (blank uses repository setting)
+        type: string
+  schedule:
+    - cron: '7 2 * * 1-5'
+    - cron: '52 5 * * 1-5'
+permissions:
+  contents: read
+concurrency:
+  group: ssi-live-capture
+  cancel-in-progress: false
+jobs:
+  capture:
+    runs-on: [self-hosted, Windows, X64, ssi-capture]
+    timeout-minutes: 165
+    env:
+      CAPTURE_SYMBOLS: ${{ inputs.symbols || vars.SSI_CAPTURE_SYMBOLS || 'SSI' }}
+      SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
+      SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ssi-capture
+          clean: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install SSI SDK
+        working-directory: ssi-capture
+        run: python -m pip install -r requirements-ssi.txt
+      - name: Capture order book
+        working-directory: ssi-capture
+        run: python -m scripts.capture_order_book
