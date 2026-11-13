@@ -1,0 +1,31 @@
+/* One light blue-grey workspace; SSI red is chrome, never a price signal. */
+:root,[data-theme="red"]{
+ color-scheme:light;--font-ui:"Segoe UI",Inter,system-ui,sans-serif;--font-size-body:17px;--sidebar-width:0px;--motion-fast:160ms;--radius-pill:999px;
+ --color-bg:#EEF3F7;--workspace-bg:#EEF3F7;--color-surface:#FFFFFF;--color-surface-subtle:#E4ECF3;--color-border:#CAD5E0;--border-control:#8193A5;
+ --color-text:#203449;--color-heading:#203449;--color-text-muted:#52677B;--color-muted:#52677B;--color-axis:#52677B;
+ --color-primary:#C8102E;--color-primary-soft:#FCE8EC;--color-primary-contrast:#FFFFFF;--color-focus:#846000;
+ --market-up:#08764C;--market-down:#BA2540;--market-reference:#846000;--market-ceiling:#8135A9;--market-floor:#08768C;
+ --color-positive:var(--market-up);--color-negative:var(--market-down);--color-warning:var(--market-reference);--color-error:var(--market-down);--color-info:#235D92;
+ --color-bid:var(--market-up);--color-ask:var(--market-down);--color-graphic-bid:var(--market-up);--color-graphic-ask:var(--market-down);
+ --color-bid-soft:#E5F3EB;--color-ask-soft:#FBE9ED;--color-error-soft:#FBE9ED;--color-warning-soft:#FFF3D6;--color-info-soft:#E8F0F9;
+ --color-sidebar-text:#FFFFFF;--color-sidebar-active-text:#FFFFFF;--color-sidebar-hover:#8E0B21;--color-sidebar-overlay:transparent;--color-active-overlay:transparent;
+ --color-control-overlay:transparent;--color-control-text:#FFFFFF;--color-spread:var(--market-reference);--color-imbalance:#235D92;
+ --color-chart-primary:#235D92;--color-chart-volume:var(--market-up);--color-chart-surface:var(--color-surface);--color-chart-grid:var(--color-border);--color-chart-fill:#E8F0F9;
+ --color-toast:var(--color-surface-subtle);--color-toast-text:var(--color-text);--color-tooltip:var(--color-surface-subtle);--color-tooltip-text:var(--color-text);
+ --gradient-sidebar:linear-gradient(110deg,#C8102E,#8E0B21);--gradient-primary:linear-gradient(110deg,#C8102E,#8E0B21);--gradient-active:linear-gradient(110deg,#C8102E,#8E0B21);
+ --gradient-hero:linear-gradient(var(--color-surface),var(--color-surface));--gradient-insight:var(--gradient-hero);--gradient-method:var(--gradient-hero);
+ --gradient-kpi-buy:var(--gradient-hero);--gradient-kpi-sell:var(--gradient-hero);--gradient-kpi-spread:var(--gradient-hero);--gradient-kpi-imbalance:var(--gradient-hero);
+ --shadow-card:0 3px 12px #0003;--shadow-popover:0 8px 30px #0008;--flash-up:#08764C30;--flash-down:#BA254030;
+}
+
+/* Legacy component declarations centralized; active dark surfaces override these. */
+:root{
+--legacy-096c91:#096C91;
+--legacy-10203755:#10203755;
+--legacy-9f2a71:#9F2A71;
+--legacy-f5f3f3:#F5F3F3;
+--legacy-fbd5d3:#FBD5D3;
+--legacy-f3f6fa:#f3f6fa;
+}
+
+:root{--welcome-dark:#180B10;--welcome-glow:#FF334D;--welcome-fog:#B91436;--welcome-ice:#7CD7E7;--welcome-halo:#FF334D55;--welcome-halo-soft:#FF334D22;--welcome-caption:#FFF4F5}

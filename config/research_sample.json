@@ -1,0 +1,61 @@
+{
+  "state": "PILOT_SAMPLE_FIXED",
+  "symbols": [
+    "AAN",
+    "BMP",
+    "CMX",
+    "CNG",
+    "CTD",
+    "DVP",
+    "HDG",
+    "HPG",
+    "HSG",
+    "HVN",
+    "ITD",
+    "JVC",
+    "LBM",
+    "LPB",
+    "MHC",
+    "PLX",
+    "SAV",
+    "SBG",
+    "SHA",
+    "SRC",
+    "ST8"
+  ],
+  "selection_asof": "2026-11-05T12:22:10.438428+07:00",
+  "selection_information_cutoff": "2026-11-04",
+  "board": "HOSE",
+  "stockType": "Stock",
+  "strata": {
+    "low": [
+      "LBM",
+      "SRC",
+      "CNG",
+      "SAV",
+      "SHA",
+      "MHC",
+      "DVP"
+    ],
+    "middle": [
+      "JVC",
+      "AAN",
+      "ST8",
+      "BMP",
+      "SBG",
+      "CMX",
+      "ITD"
+    ],
+    "high": [
+      "CTD",
+      "LPB",
+      "PLX",
+      "HSG",
+      "HDG",
+      "HPG",
+      "HVN"
+    ]
+  },
+  "seed": 401101,
+  "note": "Pilot stratification by source-native mean last20 EOD volume, current HOSE metadata. Not retrospective historical membership. Parameters and H1 test remain unlocked."
+}

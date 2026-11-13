@@ -1,0 +1,7 @@
+{
+  "status": "UNVERIFIED", "reviewer": "", "verified_at": "", "board": "HOSE",
+  "symbols": [], "price_scale": null, "quantity_scale": null,
+  "quote_is_full_snapshot": false, "zero_pair_means_absent_level": false,
+  "evidence": [{"file": "", "sha256": "", "role": "price/quantity/snapshot/session authoritative evidence"}],
+  "note": "Copy to ssi_unit_contract.json only after independent verification. Never set scales from magnitude, divisibility or EOD matching alone."
+}

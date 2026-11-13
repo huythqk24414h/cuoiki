@@ -1,0 +1,11 @@
+{
+  "version": "research-draft-1", "locked": false, "phase": "pilot",
+  "question": "Does imbalance improve out-of-sample warning of low displayed bid depth beyond M1?",
+  "symbols": [], "selection_asof": null, "board": "HOSE", "stock_type": "Stock",
+  "horizon_seconds": 60, "minimum_low_duration_seconds": 15,
+  "low_quantile": 0.1, "grid_seconds": 1, "maximum_quote_age_seconds": 5,
+  "minimum_baseline_observations": 100, "seed": 401101,
+  "minimum_days_for_evaluation": 10, "unit_contract": "config/ssi_unit_contract.json",
+  "primary_metric": "Brier(M2)-Brier(M1)", "models": ["M0", "M1", "M2"],
+  "notes": "Draft pilot values; not frozen or evidence of adequate statistical power. Empty symbols prevents silently selecting convenient data."
+}

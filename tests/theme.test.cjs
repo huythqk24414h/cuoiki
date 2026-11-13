@@ -1,0 +1,3 @@
+const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const vm=require('node:vm');
+test('single red theme binds no numeric hotkeys',()=>{let value;vm.runInNewContext(fs.readFileSync('web/themes.js','utf8'),{document:{documentElement:{setAttribute:(k,v)=>value=v}}});assert.equal(value,'red');assert.doesNotMatch(fs.readFileSync('web/themes.js','utf8'),/addEventListener|localStorage/);});
+test('one red palette, no theme picker',()=>{assert.doesNotMatch(fs.readFileSync('web/index.html','utf8'),/data-theme-choice|class="theme-switcher"/);assert.doesNotMatch(fs.readFileSync('web/theme-tokens.css','utf8'),/data-theme="[1-4]"/);});

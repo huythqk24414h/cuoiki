@@ -1,0 +1,2 @@
+# SSI DATA integration; offline snapshot serving itself uses Python stdlib.
+ssi-sdk==3.3.2

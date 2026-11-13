@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+.tools/
+data/
+*.sqlite*
+*.db
+
+.env.*
+!.env.example
+
+# Local tooling and packaged exports
+node_modules/
+.pytest_cache/
+*.zip
+*.tmp
