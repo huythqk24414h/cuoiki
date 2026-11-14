@@ -3,6 +3,7 @@ import json
 import os
 import re
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from scripts.market_store import publish, redis
 from src.eod_analytics import enrich_rows
@@ -18,6 +19,7 @@ INDEX_CODES = {"VNINDEX": "VNINDEX", "VN30": "VN30", "HNXINDEX": "HNXINDEX",
 def backfill(client, symbol, first, last):
     rows = {}
     chunk = first
+    omitted = 0
     while chunk <= last:
         end = min(chunk + timedelta(days=365), last)
         # A calendar year has fewer than 500 trading days.
@@ -30,11 +32,28 @@ def backfill(client, symbol, first, last):
         if len(items) >= 500 or int(response.get("pagesCount") or response.get("pageCount") or 1) > 1:
             raise ValueError("Incomplete SSI page")
         for item in items:
-            row = canonical_row(item, symbol, str(chunk), str(end))
+            if symbol in INDEX_CODES.values():
+                # Historical indexes can omit OHLCV fields. The index chart needs only the official close.
+                day = str(item["tradingDate"])[:10].replace("/", "-")
+                if item["symbol"] != symbol or not chunk <= date.fromisoformat(day) <= end:
+                    raise ValueError(f"{symbol}: unexpected index symbol/date")
+                close = Decimal(str(item["close"]))
+                if not close.is_finite() or close <= 0:
+                    omitted += 1
+                    continue
+                row = {"symbol":symbol,"date":day,"close_vnd":str(close),
+                       "open_vnd":None,"high_vnd":None,"low_vnd":None,"volume_shares":None,
+                       "source_value_vnd":None,"price_adjustment":"unknown",
+                       "return_pct":None,"volume_avg20_previous":None,
+                       "relative_volume20":None,"volatility20_pct":None}
+            else:
+                row = canonical_row(item, symbol, str(chunk), str(end))
             prior = rows.setdefault(row["date"], row)
             if prior != row:
                 raise ValueError("Conflicting SSI records for one date")
         chunk = end + timedelta(days=1)
+    if omitted:
+        print(f"{symbol}: excluded {omitted} invalid index closes", flush=True)
     return rows
 
 
@@ -65,7 +84,12 @@ def main():
             fields = ("symbol","date","open_vnd","high_vnd","low_vnd","close_vnd","volume_shares",
                       "return_pct","volume_avg20_previous","relative_volume20","volatility20_pct",
                       "source_value_vnd","price_adjustment")
-            publish(key, [{field: row[field] for field in fields} for row in enrich_rows(ordered)])
+            if symbol in INDEX_CODES:
+                for previous, current in zip(ordered, ordered[1:]):
+                    current["return_pct"] = str((Decimal(current["close_vnd"])/Decimal(previous["close_vnd"])-1)*100)
+            else:
+                ordered = enrich_rows(ordered)
+            publish(key, [{field: row[field] for field in fields} for row in ordered])
             series[symbol] = {"key":"liquiditylab:"+key,"first":ordered[0]["date"],
                               "last":ordered[-1]["date"],"count":len(ordered),
                               "close":{"symbol":symbol,"date":ordered[-1]["date"],
