@@ -18,6 +18,9 @@ jobs:
     runs-on: [self-hosted, Windows, X64, ssi-capture]
     timeout-minutes: 720
     env:
+      SSI_PUBLISH_LIVE: ${{ vars.SSI_PUBLISH_LIVE }}
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
       CAPTURE_SYMBOLS: ${{ inputs.symbols || vars.SSI_CAPTURE_SYMBOLS || 'SSI' }}
       SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
       SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
