@@ -13,12 +13,12 @@ const html = (await readFile(page, 'utf8')).replace(
 );
 await writeFile(page, html.replace(
   '<main id="main" tabindex="-1">',
-  '<main id="main" tabindex="-1"><p class="helper">Dữ liệu minh họa: Tổng quan, Phân tích và chỉ số dùng chuỗi mô phỏng. Bảng giá tại Sổ lệnh ghi rõ nguồn. Thu sổ lệnh SSI trực tiếp chạy riêng.</p>',
+  '<main id="main" tabindex="-1"><p class="helper">Xem nguồn và thời điểm cập nhật tại biểu đồ và bảng giá. Dữ liệu mô phỏng có nhãn riêng.</p>',
 ));
 const eod = new URL('eod-ui.js', output);
 const display = (await readFile(eod, 'utf8'))
-  .replaceAll('Historical EOD · SSI', 'EOD mô phỏng')
-  .replaceAll('SSI FastConnect V3', 'Dữ liệu mô phỏng')
+  .replaceAll('Historical EOD · SSI', 'Lịch sử EOD')
+  .replaceAll("options.source||'SSI FastConnect V3'", "options.source||state.meta?.manifest?.upstream_sources?.[0]?.name||'EOD'")
   .replaceAll('Proxy SSI value', 'Giá trị giao dịch')
   .replaceAll(' · SHA-256 khớp', '')
   .replaceAll(' · kiểm chứng lại tại mỗi lần đọc API', '')
@@ -26,6 +26,10 @@ const display = (await readFile(eod, 'utf8'))
   .replaceAll('✓ OHLC và ngày chốt hợp lệ; đơn vị nguồn mở rộng chưa xác minh', 'OHLC và khối lượng mô phỏng')
   .replaceAll('Đối chiếu nguồn khác: xem Phương pháp', 'Phương pháp mô tả cách tính chỉ số');
 await writeFile(eod, display);
+const intra = new URL('intraday-ui.js', output);
+const intraSource = (await readFile(intra, 'utf8'))
+  .replace('Tự kiểm tra local mỗi 5 giây; tải SSI tối đa mỗi 60 giây theo mã. Nến đang hình thành có thể đổi. 4H tách nghỉ trưa nên có thể thiếu kỳ. Giá/KL giữ đơn vị nguồn. Không dùng nến để dựng sổ lệnh.', 'Kiểm tra bản tin mới mỗi 5 giây. Nến tạm được dựng từ mẫu giá khớp đã nhận và có thể thiếu giao dịch. Giá giữ đơn vị SSI.');
+await writeFile(intra, intraSource);
 
 const app = new URL('app.js', output);
 const source = await readFile(app, 'utf8');
