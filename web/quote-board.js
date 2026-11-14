@@ -10,8 +10,8 @@
  const minute=Number(part('hour'))*60+Number(part('minute'));
  const weekday=['Mon','Tue','Wed','Thu','Fri'].includes(part('weekday'));
  const sessionHours=(minute>=540&&minute<690)||(minute>=780&&minute<900);
- let mode=weekday&&sessionHours?'DATA':'EOD';
- const modeLabel=document.createElement('label');modeLabel.textContent='Nguồn xem';const modeSelect=document.createElement('select');modeSelect.innerHTML='<option value="DATA">SSI DATA · nhận theo sự kiện</option><option value="EOD">Giá đóng cửa đã lưu · không realtime</option>';modeSelect.value=mode;modeLabel.append(modeSelect);q('#board-search').parentElement.parentElement.prepend(modeLabel);modeSelect.addEventListener('change',()=>{mode=modeSelect.value;load(true);});
+ let mode=!window.StaticLiquidity&&weekday&&sessionHours?'DATA':'EOD';
+ const modeLabel=document.createElement('label');modeLabel.textContent='Nguồn xem';const modeSelect=document.createElement('select');modeSelect.innerHTML='<option value="DATA">SSI DATA · nhận theo sự kiện</option><option value="EOD">Giá đóng cửa đã lưu · không realtime</option>';modeSelect.value=mode;if(window.StaticLiquidity)modeSelect.disabled=true;modeLabel.append(modeSelect);q('#board-search').parentElement.parentElement.prepend(modeLabel);modeSelect.addEventListener('change',()=>{mode=modeSelect.value;load(true);});
  let revision=0,busy=false,timer=null,searchTimer=null,paint=null,stream=null,streamKey='',streamReady=false,lastGlobalScope=window.MarketState.value.scope;
  function scheduleRender(){if(paint==null)paint=requestAnimationFrame(()=>{paint=null;render();});}
  const rowNodes=new Map(),lastValues=new Map();
@@ -57,7 +57,7 @@
    q('#board-page-status').textContent=`Trang ${result.page}/${result.pages} · ${result.rows.length}/${result.total} mục khớp · ${result.catalog_total} mục danh mục SSI`;
    q('#board-page-prev').disabled=result.page<=1;q('#board-page-next').disabled=result.page>=result.pages;
    q('#board-status').title=result.units_note+' '+result.view_note;
-   q('#board-status').textContent=result.mode==='EOD'?'Giá đóng cửa SSI đã lưu; ngày ghi ở từng mã. Không phải realtime; không có bid/ask lịch sử.':`${result.fresh_rows}/${result.rows.length} mã mới · ${result.received_rows} mã đã nhận. ${result.received_rows===0?'SSI chưa gửi bản tin; có thể chọn Giá đóng cửa đã lưu.':'Xem thời gian và trạng thái riêng từng mã.'}`;
+   q('#board-status').textContent=result.display_note || (result.mode==='EOD'?'Giá đóng cửa SSI đã lưu; ngày ghi ở từng mã. Không phải realtime; không có bid/ask lịch sử.':`${result.fresh_rows}/${result.rows.length} mã mới · ${result.received_rows} mã đã nhận. ${result.received_rows===0?'SSI chưa gửi bản tin; có thể chọn Giá đóng cửa đã lưu.':'Xem thời gian và trạng thái riêng từng mã.'}`);
  }
  function closeStream(){++revision;if(stream)stream.close();stream=null;streamKey='';streamReady=false;}
  function connectStream(){
