@@ -149,7 +149,8 @@ function renderResult(result, payload) {
   $('#result-values').replaceChildren();
   const fmt = calculator.formatDecimal;
   const values = [['Độ sâu mua', `${fmt(result.bid_depth_vnd,4)} VND`], ['Độ sâu bán', `${fmt(result.ask_depth_vnd,4)} VND`],
-    ['Spread', `${fmt(result.spread_bps,4)} bps`], ['Imbalance theo giá trị', fmt(result.imbalance,6)],
+    ['Spread tuyệt đối', `${fmt(result.spread_vnd_per_share,4)} VND/cp`],
+    ['Spread tương đối', `${fmt(result.spread_bps,4)} bps`], ['Imbalance theo giá trị', fmt(result.imbalance,6)],
     ['Tổng độ sâu hai phía', `${fmt(result.total_depth_vnd,4)} VND`],
     ['Số mức mua / bán', `${result.levels.bid} / ${result.levels.ask}`]];
   values.forEach(([name,value]) => {

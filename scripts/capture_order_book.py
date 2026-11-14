@@ -94,6 +94,7 @@ def main():
                         points.append([event_time, price])
                     website_rows.append({
                         "symbol":symbol, "session":flag, "status":status,
+                        "metrics":stream.book(symbol) if publish_live and status == "fresh_two_sided_quote" else None,
                         "quote_time":quote["event_time"] if quote else None,
                         "trade_time":trade.get("event_time"),
                         "bids":quote["bids"] if status == "fresh_two_sided_quote" else [],

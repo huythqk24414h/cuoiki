@@ -21,7 +21,11 @@ def redis(command):
     return payload["result"]
 
 
-def publish(kind, data):
+def publish(kind, data, ttl=None):
     key = "liquiditylab:" + kind
-    if redis(["SET", key, json.dumps(data, allow_nan=False, separators=(",", ":"))]) != "OK":
+    command = ["SET", key, json.dumps(data, allow_nan=False, separators=(",", ":"))]
+    if ttl is not None:
+        command.extend(["EX", ttl])
+    if redis(command) != "OK":
         raise RuntimeError("Market store did not acknowledge write")
+    return len(command[2].encode("utf-8"))

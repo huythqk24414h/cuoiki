@@ -6,7 +6,7 @@
   const dateVN = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value.split('-').reverse().join('/') : '—';
   const state = {meta:null, rows:[], summary:null, symbol:'', range:'1M', search:'', sort:'date', descending:true, page:1, price:true, volume:true};
   Object.assign(state,window.MarketState.value);
-  let catalog=[];
+  let catalog=[], hasCoverage=false;
   let memberships={};
   function params(){const s=window.MarketState.value;return new URLSearchParams({symbol:state.symbol,range:state.range,scope:s.scope,resolution:s.resolution,to:s.to,...(s.range==='CUSTOM'&&s.from?{from:s.from}:{})});}
   function syncToolbar(){
@@ -20,11 +20,14 @@
     const s=window.MarketState.value,needle=q('#market-search').value.trim().toLocaleLowerCase('vi');
     const members=catalog.filter(r=>(s.scope==='ALL'||r.board===s.scope||(s.scope.startsWith('INDEX:')&&(memberships[s.scope.slice(6)]||[]).includes(r.symbol)))&&(s.type==='ALL'||r.stockType===s.type)&&(!needle||[r.symbol,r.symbolNameVi,r.symbolNameEn].some(v=>String(v||'').toLocaleLowerCase('vi').includes(needle))));
     const select=q('#symbol-filter');select.replaceChildren();
-    for(const row of members){const option=node('option',`${row.symbol} · ${row.symbolNameVi||row.board} · ${row.stockType||'chưa phân loại'}`);option.value=row.symbol;select.append(option);}
+    const visible=hasCoverage ? members.slice(0,100) : members;
+    const chosen=members.find(row=>row.symbol===state.symbol);
+    if(chosen&&!visible.includes(chosen)) visible.push(chosen);
+    for(const row of visible){const option=node('option',`${row.symbol} · ${row.symbolNameVi||row.board} · ${row.stockType||'chưa phân loại'}${hasCoverage ? ' · '+(row.daily_last?'có EOD':'chưa có EOD')+(row.intraday_last?' · có nội ngày':'')+(row.status==='absent'||row.status==='ended'?' · ngoài danh mục hiện hành':'') : ''}`);option.value=row.symbol;select.append(option);}
     if(members.some(r=>r.symbol===state.symbol))select.value=state.symbol;
     else if(members.length){state.symbol=members[0].symbol;window.MarketState.set({symbol:state.symbol});}
     select.disabled=!members.length;
-    text('#universe-note',`${members.length}/${catalog.length} mã khớp danh mục SSI hiện tại; không phải mẫu số lịch sử.`);
+    text('#universe-note',`${members.length}/${catalog.length} mã khớp. ${visible.length<members.length?'Nhập mã hoặc tên để tìm trong toàn bộ danh mục.':'Danh mục SSI hiện tại.'}`);
   }
   async function loadCoverage(){
     const s=window.MarketState.value;
@@ -327,7 +330,7 @@
         const message=`Chưa có snapshot đã kiểm chứng. ${(meta.issues || []).join(' · ')} Chạy fetch_ssi_history.py hoặc kiểm tra snapshot SSI local.`;
         select.append(node('option','Chưa có dữ liệu'));clearData(message);showError(message);text('#snapshot-state','BLOCKED · Chưa có snapshot đã kiểm chứng');return;
       }
-      const directory=await request('/api/market/catalog');catalog=directory.securities;memberships=directory.index_memberships||{};
+      const directory=await request('/api/market/catalog');catalog=directory.securities;hasCoverage=Boolean(directory.coverage_available);memberships=directory.index_memberships||{};
       q('#market-scope').querySelectorAll('[data-index-scope]').forEach(o=>o.remove());directory.indexes.forEach(r=>{const o=node('option',`Chỉ số: ${r.index}`);o.value='INDEX:'+r.index;o.dataset.indexScope='true';o.disabled=!memberships[r.index];if(o.disabled)o.title='Chưa có membership SSI đã kiểm chứng; chọn sàn hoặc chỉ số riêng bên dưới';q('#market-scope').append(o);});
       if(!catalog.length)catalog=meta.loaded_symbols.map(symbol=>({symbol,board:'unknown'}));
       const types=q('#market-type');types.replaceChildren(node('option','Tất cả loại'));types.options[0].value='ALL';

@@ -1,0 +1,44 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const handle = require('../api/market-data.js');
+
+test('catalog pagination, coverage, missing symbol, and Redis failure', async (t) => {
+  const directory = Array.from({length:85}, (_,n)=>({symbol:'X'+n,board:n<80?'HOSE':'HNX'}));
+  const db = {
+    catalog:{securities:directory,index_memberships:{VN30:['X1']}},
+    history:{indexes:[],symbols:{X1:{last:'2026-11-13'}}},
+    'intraday-coverage':{symbols:{X1:{last:'2026-11-13T14:30:00+07:00'}}},
+    'intraday:X1':{candles:{'15m':[]}},
+  };
+  const oldUrl = process.env.UPSTASH_REDIS_REST_URL, oldToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'test';
+  t.after(() => {
+    if (oldUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = oldUrl;
+    if (oldToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = oldToken;
+  });
+  const store = t.mock.method(globalThis,'fetch', async (_, opts)=>{
+    const key = JSON.parse(opts.body)[1].slice('liquiditylab:'.length);
+    return {ok:true,json:async()=>({result:db[key] ? JSON.stringify(db[key]) : null})};
+  });
+  async function get(query) {
+    const res = {setHeader(){},status(code){this.code=code;return this;},
+      json(body){return [this.code,body];}};
+    return handle({method:'GET',query},res);
+  }
+  const [code, page] = await get({kind:'catalog',board:'HOSE',page:'2',size:'25'});
+  assert.equal(code,200);
+  assert.equal(page.total,80);
+  assert.equal(page.securities[0].symbol,'X25');
+  const [,member] = await get({kind:'catalog',board:'VN30'});
+  assert.equal(member.securities[0].daily_last,'2026-11-13');
+  assert.ok(member.securities[0].intraday_last);
+  assert.equal((await get({kind:'series',symbol:'X2'}))[0],404);
+  assert.equal((await get({kind:'series',symbol:'X1'}))[0],502);
+  assert.deepEqual(await get({kind:'intraday',symbol:'X1',resolution:'15m'}),[200,{rows:[]}]);
+  assert.equal((await get({kind:'catalog',size:'500'}))[0],400);
+  store.mock.mockImplementation(async()=>({ok:false}));
+  assert.equal((await get({kind:'catalog'}))[0],502);
+});

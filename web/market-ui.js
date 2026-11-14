@@ -75,7 +75,7 @@
     q('#book-bid-qty').textContent='KL mua (cp)';q('#book-ask-qty').textContent='KL bán (cp)';
     q('#book-status').textContent=`${label} · ${payload.symbol} · ${label==='MANUAL'?'Đầu vào người dùng, không phải SSI/live.':'Quote đủ điều kiện tính chỉ báo.'}`;
     q('#book-caption').textContent=`${label} · giá VND/cp · khối lượng cp`;
-    q('#book-status').textContent+=` Spread ${fmt(result.spread_bps,2)} bps đo khoảng chênh giá tốt nhất; độ sâu chỉ gồm ba mức. Imbalance ${fmt(result.imbalance,4)} thể hiện giá trị lệnh chờ nghiêng ${Number(result.imbalance)>0?'phía mua':Number(result.imbalance)<0?'phía bán':'cân bằng'}. Lệnh có thể bị hủy; không dự báo chắc hướng giá hoặc khả năng khớp lệnh lớn.`;
+    q('#book-status').textContent+=` Spread ${fmt(result.spread_vnd_per_share,2)} VND/cp (${fmt(result.spread_bps,2)} bps) đo khoảng chênh giá tốt nhất; độ sâu chỉ gồm ba mức. Imbalance ${fmt(result.imbalance,4)} thể hiện giá trị lệnh chờ nghiêng ${Number(result.imbalance)>0?'phía mua':Number(result.imbalance)<0?'phía bán':'cân bằng'}. Lệnh có thể bị hủy; không dự báo chắc hướng giá hoặc khả năng khớp lệnh lớn.`;
     for(const [id,key] of [['bid','bid_depth_vnd'],['ask','ask_depth_vnd'],['spread','spread_bps'],['imbalance','imbalance']])q('#book-'+id).textContent=fmt(result[key],id==='imbalance'?6:4);
     const body=q('#book-levels');body.replaceChildren();
     for(let i=0;i<3;i++){

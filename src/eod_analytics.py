@@ -40,6 +40,8 @@ def enrich_rows(rows):
                 returns.append(change)
             average = sum(volumes[-20:]) / Decimal(20) if len(volumes) >= 20 else None
             relative = volume / average if average is not None and average > 0 else None
+            # Days to sell 100,000 shares at 5% of the preceding 20-session ADV.
+            capacity_days = Decimal(100000) / (average * Decimal('0.05')) if average else None
             volatility = None
             if len(returns) >= 20:
                 sample = returns[-20:]
@@ -53,10 +55,13 @@ def enrich_rows(rows):
                 reasons['relative_volume20'] = reasons['volume_avg20_previous']
             elif average == 0:
                 reasons['relative_volume20'] = 'Khối lượng trung bình 20 phiên trước bằng 0; không chia cho 0.'
+            if capacity_days is None:
+                reasons['liquidation_days_100k_5pct'] = 'Cần 20 phiên trước có khối lượng bình quân dương.'
             if volatility is None:
                 reasons['volatility20_pct'] = 'Cần 20 lợi suất, tương ứng ít nhất 21 giá đóng cửa.'
             out.append({**row, 'return_pct': _text(change),
                         'volume_avg20_previous': _text(average), 'relative_volume20': _text(relative),
+                        'liquidation_days_100k_5pct': _text(capacity_days),
                         'volatility20_pct': _text(volatility), 'missing_reasons': reasons})
             volumes.append(volume)
             previous_close = close

@@ -90,6 +90,7 @@ def calculate(payload):
     return {
         'symbol': book.symbol, 'bid_depth_vnd': str(bid), 'ask_depth_vnd': str(ask),
         'imbalance': str((bid-ask)/(bid+ask)),
+        'spread_vnd_per_share': str(book.asks[0][0]-book.bids[0][0]),
         'spread_bps': str((book.asks[0][0]-book.bids[0][0])/mid*10000),
         'levels': {'bid': len(book.bids), 'ask': len(book.asks)},
         'source': 'manual', 'contract_version': '1.0', 'engine_version': '0.1.0',

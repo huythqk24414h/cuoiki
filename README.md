@@ -27,7 +27,7 @@ Chạy kiểm thử: python -m unittest discover -s tests; node --test tests/*.t
 
 ## An toàn và đóng gói
 
-Không giao dịch, không database. Bí mật SSI chỉ ở .env local. scripts/build_submission.py quét bí mật và loại .env, SDK, dữ liệu riêng khỏi ZIP; máy khác cần tự cấu hình và thu dữ liệu theo quyền SSI. Không phân phối dữ liệu SSI hoặc thông tin xác thực khi chưa được phép. ZIP source không chứa dataset riêng.
+Bản local không gửi lệnh và đọc dữ liệu từ tệp. Đặt khóa SSI của bản local trong .env. Bản production dùng GitHub Secrets để chạy workflow và Redis để lưu dữ liệu. scripts/build_submission.py quét bí mật và loại .env, SDK, dữ liệu riêng khỏi ZIP; máy khác cần tự cấu hình và thu dữ liệu theo quyền SSI. Không phân phối dữ liệu SSI hoặc thông tin xác thực khi chưa được phép. ZIP source không chứa dataset riêng.
 
 
 ## Cập nhật nội ngày ngày 06/11/2026

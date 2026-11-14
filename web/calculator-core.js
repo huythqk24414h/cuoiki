@@ -151,6 +151,7 @@
       'Độ sâu mua (VND)': decimal(bid, scale),
       'Độ sâu bán (VND)': decimal(ask, scale),
       'Mid (VND/cổ phiếu)': decimal(bestSum * 5n, scale + 1),
+      'Spread (VND/cổ phiếu)': decimal(asks[0] - bids[0], scale),
       'Spread (bps)': ratio((asks[0] - bids[0]) * 20000n, bestSum),
       'Imbalance': ratio(bid - ask, bid + ask),
     };

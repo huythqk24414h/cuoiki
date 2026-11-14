@@ -18,15 +18,17 @@ window.StaticLiquidity = (() => {
 
   let catalogTime = 0, catalogPromise;
   const series = new Map();
-  async function load(kind, symbol) {
-    const q = new URLSearchParams({kind,...(symbol ? {symbol} : {})});
+  async function load(kind, symbol, resolution) {
+    const q = new URLSearchParams({kind,...(symbol ? {symbol} : {}),...(resolution ? {resolution} : {})});
     const response = await fetch('/api/market-data?'+q,{cache:'no-store'});
-    return response.ok ? response.json() : null;
+    if (response.status === 404) return null;
+    if (!response.ok) throw Error('Kho dữ liệu SSI tạm thời không truy cập được.');
+    return response.json();
   }
   function catalog() {
     if (!catalogPromise || Date.now()-catalogTime>60000) {
       catalogTime = Date.now();
-      catalogPromise = load('history').catch(()=>null);
+      catalogPromise = load('history').catch(error=>{catalogPromise=undefined;throw error;});
     }
     return catalogPromise;
   }
@@ -39,15 +41,30 @@ window.StaticLiquidity = (() => {
       loaded_symbols:equities,issues:[],historical_range:{start:data.query_start,end:last,actual_first:first,actual_last:last},
       manifest:{upstream_sources:[{name:'SSI FastConnect V3'}],adjustment_policy:'unknown',
         retrieved_at_utc:data.updated_at,row_count:symbols.reduce((n,s)=>n+data.symbols[s].count,0)}};
-    if(path==='catalog') return {securities:equities.map(symbol=>({symbol,board:'HOSE',stockType:'Stock'})),
-      indexes:symbols.filter(s=>data.indexes.includes(s)).map(index=>({index})),index_memberships:{}};
-    if(path==='insights') return {paragraphs:['Dữ liệu ngày từ SSI FastConnect. Giá giữ đơn vị nguồn.']};
+    if(path==='catalog') {
+      const directory=await load('catalog');
+      return {securities:directory?.securities||equities.map(symbol=>({symbol,board:'HOSE',stockType:'Stock',daily_last:data.symbols[symbol].last})),
+        indexes:symbols.filter(s=>data.indexes.includes(s)).map(index=>({index})),
+        index_memberships:directory?.index_memberships||{}, coverage_available:true};
+    }
+    if(path==='insights') {
+      const day=q.get('date');
+      const payload=await historyResponse('series',new URLSearchParams({symbol:q.get('symbol')||'',from:day||'',to:day||''}),data);
+      const value=payload.summary?.liquidation_days_100k_5pct;
+      return {paragraphs:[value!=null&&Number.isFinite(Number(value))
+        ? 'Ước lượng thoát 100.000 cổ phiếu ở mức tham gia 5% khối lượng bình quân 20 phiên trước: '+
+          Number(value).toLocaleString('vi-VN',{maximumFractionDigits:2})+' phiên. Đây là kịch bản; thanh khoản, giá và khả năng khớp thực tế có thể thay đổi.'
+        : 'Chưa đủ 20 phiên có dữ liệu và khối lượng bình quân dương để ước lượng số phiên thoát vị thế.']};
+    }
     const symbol=q.get('symbol');
     let rows=[];
     if(data.symbols[symbol]) {
       const cached=series.get(symbol);
-      if(cached?.version!==data.updated_at)
-        series.set(symbol,{version:data.updated_at,rows:load('series',symbol).catch(()=>null)});
+      const version=data.symbols[symbol].revision||data.updated_at;
+      if(cached?.version!==version) {
+        if(series.size>=10) series.delete(series.keys().next().value);
+        series.set(symbol,{version,rows:load('series',symbol).catch(()=>null)});
+      }
       rows=await series.get(symbol).rows;
       if(!rows){series.delete(symbol);throw Error('Chuỗi SSI tạm thời chưa tải được.');}
     }
@@ -59,8 +76,9 @@ window.StaticLiquidity = (() => {
     if(path==='index') return {source:'SSI FastConnect V3',rows:rows.map(row=>({
       tradingDate:row.date,indexValue:row.close_vnd,indexChangePercentage:row.return_pct}))};
     const resolution=q.get('resolution')||'1D', summary=rows.at(-1);
+    const omitted=data.symbols[symbol]?.quarantined_dates?.length || 0;
     return {available:true,rows:aggregate(rows,resolution),summary,resolution,
-      last_available_session:summary?.date,unit_status:'Đơn vị nguồn SSI'};
+      last_available_session:summary?.date,message:data.symbols[symbol]?null:'Mã này chưa có lịch sử SSI được nạp.',unit_status:'Đơn vị nguồn SSI'+(omitted ? ' · '+omitted+' phiên OHLCV bị cách ly' : '')};
   }
   async function liveBoard(q) {
     const data=await load('live').catch(()=>null);
@@ -101,14 +119,29 @@ window.StaticLiquidity = (() => {
       const total = String(units(bid) + units(ask)).padStart(places+1,'0');
       return {bid_depth_vnd:bid, ask_depth_vnd:ask,
         total_depth_vnd:places ? total.slice(0,-places)+'.'+total.slice(-places) : total,
-        spread_bps:stats['Spread (bps)'], imbalance:stats.Imbalance,
+        spread_vnd_per_share:stats['Spread (VND/cổ phiếu)'], spread_bps:stats['Spread (bps)'], imbalance:stats.Imbalance,
         levels:{bid:book.bids.length,ask:book.asks.length}};
     }
     const endpoint=path.split('/').at(-1);
+    if(endpoint==='book') {
+      const symbol=q.get('symbol');
+      const snapshot=await load('live');
+      const row=snapshot?.rows?.find(row=>row.symbol===symbol);
+      const age=Date.now()-Date.parse(row?.quote_time);
+      if (row?.status==='fresh_two_sided_quote'&&age>=0&&age<=30000) {
+        if(row.metrics) return row.metrics;
+        return {symbol, available:false, status:'unverified',
+          reason:'Đã nhận báo giá SSI. Đang chờ xác minh đơn vị giá và khối lượng.',
+          unverified_levels:{bids:row.bids,asks:row.asks},event_time:row.quote_time,
+          received_at:snapshot.updated_at,session:row.session};
+      }
+      return {symbol, available:false,status:snapshot?'stale':'unavailable',
+        reason:snapshot?'Chưa có báo giá SSI mới đủ điều kiện cho mã này.':'Chưa có snapshot sổ lệnh SSI được công bố.'};
+    }
     if(endpoint==='board'&&q.get('mode')==='DATA') return liveBoard(q);
     if(endpoint==='intraday') {
-      const snapshot=await load('intraday');
-      const rows=snapshot?.symbols?.[q.get('symbol')]?.[q.get('resolution')]||[];
+      const snapshot=await load('intraday',q.get('symbol'),q.get('resolution'));
+      const rows=snapshot?.rows||[];
       return {rows,last_source_time:rows.at(-1)?.closed_at,retrieved_at:snapshot?.updated_at,
         status:rows.length?'SSI · Nến đã đóng':'Chưa có nến SSI cho mã này'};
     }
@@ -116,10 +149,9 @@ window.StaticLiquidity = (() => {
     if(published&&['meta','catalog','series','index','insights'].includes(endpoint))
       return historyResponse(endpoint,q,published);
 
-    const real = Boolean(published);
     const closing=published ? Object.entries(published.symbols)
       .filter(([symbol])=>!published.indexes.includes(symbol)).map(([,entry])=>entry.close) : [];
-    const latest=published||real ? closing.map(row=>row.date).sort().at(-1) : null;
+    const latest=published ? closing.map(row=>row.date).sort().at(-1) : null;
     if (path === '/api/market/status') return {
       status:'Bản web EOD', snapshot_asof:latest,
       disabled_reason:'Bản web sử dụng bảng giá đóng cửa do GitHub Actions cập nhật.',
@@ -136,12 +168,12 @@ window.StaticLiquidity = (() => {
       const page = Math.min(pages,Number(q.get('page')) || 1);
       const boardRows = matching.slice((page-1)*size,page*size).map(row=>({
         symbol:row.symbol, bids:[], asks:[], last_price:row.close, high:row.high,low:row.low,
-        total_volume:row.volume, session:real || published ? 'EOD '+row.date : 'Mô phỏng', status:'eod', trade_status:'eod'
+        total_volume:row.volume, session:'EOD '+row.date, status:'eod', trade_status:'eod'
       }));
       return {mode:'EOD',rows:boardRows,page,pages,total:matching.length,catalog_total:closing.length,
-        units_note:real || published ? 'Giá và khối lượng theo đơn vị nguồn SSI.' : 'Chưa có dữ liệu SSI.',
+        units_note:published ? 'Giá và khối lượng theo đơn vị nguồn SSI.' : 'Chưa có dữ liệu SSI.',
         view_note:'Bản web hiển thị các mã có trong snapshot.',
-        display_note:real || published ? 'Giá đóng cửa SSI · Ngày ghi ở mỗi mã.' : 'Chưa có bảng giá SSI được công bố.'};
+        display_note:published ? 'Giá đóng cửa SSI · Ngày ghi ở mỗi mã.' : 'Chưa có bảng giá SSI được công bố.'};
     }
     throw Error(unavailable);
   }

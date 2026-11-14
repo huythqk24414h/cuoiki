@@ -6,6 +6,10 @@ on:
         description: Rebuild all series from the first Vietnam trading date
         type: boolean
         default: false
+      batch_size:
+        description: Maximum new daily series this run (1–40)
+        type: number
+        default: 8
   schedule:
     - cron: '37 9 * * 1-5'
 permissions:
@@ -20,7 +24,8 @@ jobs:
     timeout-minutes: 120
     env:
       SSI_FULL_BACKFILL: ${{ inputs.full_backfill || false }}
-      SSI_EOD_SYMBOLS: ${{ vars.SSI_EOD_SYMBOLS || 'SSI,HPG,FPT,REE,SAM' }}
+      SSI_EOD_SYMBOLS: ${{ vars.SSI_EOD_SYMBOLS || 'VN30' }}
+      SSI_EOD_BACKFILL_BATCH: ${{ inputs.batch_size || vars.SSI_EOD_BACKFILL_BATCH || 8 }}
       SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
       SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
       UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}

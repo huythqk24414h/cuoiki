@@ -60,6 +60,9 @@ def book_metrics(candidate, scale, session, now):
                 'input_hash':sha256(json.dumps({'symbol':candidate['symbol'],'event_time':candidate['event_time'],
                                                'received_at':candidate['received_at'],'bids':bids,'asks':asks},
                                               sort_keys=True,separators=(',',':')).encode()).hexdigest(),
+                'spread_vnd_per_share':str(Decimal(asks[0]['price'])-Decimal(bids[0]['price'])),
+                'bid_displayed_shares':str(sum(Decimal(row['quantity']) for row in bids)),
+                'ask_displayed_shares':str(sum(Decimal(row['quantity']) for row in asks)),
                 'spread_bps':str((Decimal(asks[0]['price'])-Decimal(bids[0]['price']))/mid*10000),
                 'imbalance':str((bid-ask)/(bid+ask)),'bids':bids,'asks':asks}
 

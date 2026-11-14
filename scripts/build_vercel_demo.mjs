@@ -3,7 +3,7 @@ import { cp, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 const output = new URL('../public-demo/', import.meta.url);
 await mkdir(output, { recursive: true });
 await cp(new URL('../web/', import.meta.url), output, { recursive: true });
-for (const file of ['static-api.js', 'prices.json']) {
+for (const file of ['static-api.js']) {
   await copyFile(new URL('../demo/' + file, import.meta.url), new URL(file, output));
 }
 const page = new URL('index.html', output);
@@ -19,16 +19,16 @@ const eod = new URL('eod-ui.js', output);
 const display = (await readFile(eod, 'utf8'))
   .replaceAll('Historical EOD · SSI', 'Lịch sử EOD')
   .replaceAll("options.source||'SSI FastConnect V3'", "options.source||state.meta?.manifest?.upstream_sources?.[0]?.name||'EOD'")
-  .replaceAll('Proxy SSI value', 'Giá trị giao dịch')
+  .replaceAll('Proxy SSI value', 'Giá trị SSI theo nguồn')
   .replaceAll(' · SHA-256 khớp', '')
   .replaceAll(' · kiểm chứng lại tại mỗi lần đọc API', '')
-  .replaceAll('✓ CSV khớp SHA-256 trong manifest', 'Chuỗi được tạo để minh họa')
-  .replaceAll('✓ OHLC và ngày chốt hợp lệ; đơn vị nguồn mở rộng chưa xác minh', 'OHLC và khối lượng mô phỏng')
+  .replaceAll('✓ CSV khớp SHA-256 trong manifest', 'Chuỗi lấy từ API SSI')
+  .replaceAll('✓ OHLC và ngày chốt hợp lệ; đơn vị nguồn mở rộng chưa xác minh', 'OHLC và khối lượng do SSI cung cấp')
   .replaceAll('Đối chiếu nguồn khác: xem Phương pháp', 'Phương pháp mô tả cách tính chỉ số');
 await writeFile(eod, display);
 const intra = new URL('intraday-ui.js', output);
 const intraSource = (await readFile(intra, 'utf8'))
-  .replace('Tự kiểm tra local mỗi 5 giây; tải SSI tối đa mỗi 60 giây theo mã. Nến đang hình thành có thể đổi. 4H tách nghỉ trưa nên có thể thiếu kỳ. Giá/KL giữ đơn vị nguồn. Không dùng nến để dựng sổ lệnh.', 'Đọc các nến đã đóng từ OHLCV 1 phút của SSI. Job cập nhật định kỳ trong phiên.');
+  .replace('Tự kiểm tra local mỗi 5 giây; tải SSI tối đa mỗi 60 giây theo mã. Nến đang hình thành có thể đổi. 4H tách nghỉ trưa nên có thể thiếu kỳ. Giá/KL giữ đơn vị nguồn. Không dùng nến để dựng sổ lệnh.', 'Đọc các nến đã đóng từ OHLCV 1 phút của SSI. HOSE · khớp lệnh liên tục. Khung theo buổi dài tối đa 135 phút sáng hoặc 90 phút chiều. Giá và khối lượng theo đơn vị nguồn SSI.');
 await writeFile(intra, intraSource);
 
 const app = new URL('app.js', output);
