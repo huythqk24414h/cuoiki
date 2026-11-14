@@ -4,7 +4,7 @@ import json
 import os
 import re
 import time
-from datetime import datetime
+from datetime import datetime, time as clock_time
 from pathlib import Path
 
 from src.ssi_stream import DataStream, VN
@@ -17,13 +17,27 @@ def main():
         raise SystemExit("Specify one to ten valid HOSE ticker symbols.")
 
     now = datetime.now(VN)
-    minute = now.hour * 60 + now.minute
-    windows = ((9 * 60, 11 * 60 + 30), (12 * 60 + 45, 14 * 60 + 30))
-    end = next((end for start, end in windows if start <= minute < end), None)
-    if now.weekday() >= 5 or end is None:
-        print("Outside the configured capture windows (Vietnam time).")
+    if now.weekday() >= 5:
+        print("Weekend in Vietnam. Select a trading day.")
         return
-    deadline = now.replace(hour=end // 60, minute=end % 60, second=0, microsecond=0)
+    windows = ((clock_time(9), clock_time(11, 30)), (clock_time(13), clock_time(14, 45)))
+    for opens, closes in windows:
+        deadline = datetime.combine(now.date(), closes, VN)
+        if now < deadline:
+            break
+    else:
+        print("Today's capture sessions have ended.")
+        return
+
+    start = datetime.combine(now.date(), opens, VN)
+    if now < start:
+        print(f"Waiting for the session at {start.isoformat()}.", flush=True)
+        while datetime.now(VN) < start:
+            time.sleep(min(30, max(0, (start - datetime.now(VN)).total_seconds())))
+    if datetime.now(VN) >= deadline:
+        raise SystemExit("The selected capture session ended before collection started.")
+    now = datetime.now(VN)
+
 
     folder = Path("data/order_book_capture")
     folder.mkdir(parents=True, exist_ok=True)
