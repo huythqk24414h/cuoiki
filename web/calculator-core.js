@@ -123,5 +123,38 @@
       'Dữ liệu nhập tay chưa được xác minh với SSI. Lệnh chờ có thể bị sửa hoặc hủy; các chỉ số không bảo đảm khớp lệnh và không phải khuyến nghị đầu tư.'];
   }
 
-  return Object.freeze({buildManualPayload,formatDecimal,cumulativeLevels,describeResult});
+  function calculateManual(payload) {
+    const prices = [...payload.bids, ...payload.asks].map(row => decimalParts(row.price));
+    const scale = Math.max(...prices.map(price => price.fraction.length));
+    const scaled = price => BigInt(price.integer + price.fraction.padEnd(scale, '0'));
+    const bids = prices.slice(0, payload.bids.length).map(scaled);
+    const asks = prices.slice(payload.bids.length).map(scaled);
+    if (bids.some((value, index) => index && value >= bids[index - 1]) ||
+        asks.some((value, index) => index && value <= asks[index - 1]) || bids[0] >= asks[0]) {
+      throw new Error('Giá mua phải giảm dần, giá bán phải tăng dần và giá mua tốt nhất phải thấp hơn giá bán tốt nhất.');
+    }
+    const depth = (rows, values) => rows.reduce((sum, row, index) => sum + values[index] * BigInt(row.quantity), 0n);
+    const bid = depth(payload.bids, bids), ask = depth(payload.asks, asks);
+    const bestSum = bids[0] + asks[0];
+    const unit = 10n ** BigInt(scale);
+    function decimal(value, digits) {
+      const absolute = (value < 0n ? -value : value).toString().padStart(digits + 1, '0');
+      const prefix = value < 0n ? '-' : '';
+      return digits ? prefix + absolute.slice(0, -digits) + '.' + absolute.slice(-digits) : prefix + absolute;
+    }
+    function ratio(numerator, denominator) {
+      const absolute = numerator < 0n ? -numerator : numerator;
+      const rounded = (absolute * 10n ** 12n * 2n + denominator) / (denominator * 2n);
+      return decimal(numerator < 0n ? -rounded : rounded, 12);
+    }
+    return {
+      'Độ sâu mua (VND)': decimal(bid, scale),
+      'Độ sâu bán (VND)': decimal(ask, scale),
+      'Mid (VND/cổ phiếu)': decimal(bestSum * 5n, scale + 1),
+      'Spread (bps)': ratio((asks[0] - bids[0]) * 20000n, bestSum),
+      'Imbalance': ratio(bid - ask, bid + ask),
+    };
+  }
+
+  return Object.freeze({buildManualPayload,calculateManual,formatDecimal,cumulativeLevels,describeResult});
 }));
