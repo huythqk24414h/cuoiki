@@ -6,8 +6,8 @@ on:
         description: Comma-separated HOSE symbols (blank uses repository setting)
         type: string
   schedule:
-    - cron: '7 2 * * 1-5'
-    - cron: '52 5 * * 1-5'
+    - cron: '57 1 * * 1-5'
+    - cron: '57 5 * * 1-5'
 permissions:
   contents: read
 concurrency:
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   capture:
     runs-on: [self-hosted, Windows, X64, ssi-capture]
-    timeout-minutes: 165
+    timeout-minutes: 720
     env:
       CAPTURE_SYMBOLS: ${{ inputs.symbols || vars.SSI_CAPTURE_SYMBOLS || 'SSI' }}
       SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
