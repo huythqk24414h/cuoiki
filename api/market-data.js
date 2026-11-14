@@ -4,8 +4,8 @@ module.exports = async function (req, res) {
   if (req.method !== 'GET') return res.status(405).json({error:'Method not allowed'});
   const kind = req.query.kind;
   if (!['history','series','live'].includes(kind)) return res.status(400).json({error:'Unknown dataset'});
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_READ_ONLY_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return res.status(503).json({error:'Market data store not configured'});
   try {
     async function read(key) {
