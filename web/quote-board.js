@@ -11,7 +11,7 @@
  const weekday=['Mon','Tue','Wed','Thu','Fri'].includes(part('weekday'));
  const sessionHours=(minute>=540&&minute<690)||(minute>=780&&minute<900);
  let mode=!window.StaticLiquidity&&weekday&&sessionHours?'DATA':'EOD';
- const modeLabel=document.createElement('label');modeLabel.textContent='Nguồn xem';const modeSelect=document.createElement('select');modeSelect.innerHTML='<option value="DATA">SSI DATA · nhận theo sự kiện</option><option value="EOD">Giá đóng cửa đã lưu · không realtime</option>';modeSelect.value=mode;if(window.StaticLiquidity)modeSelect.disabled=true;modeLabel.append(modeSelect);q('#board-search').parentElement.parentElement.prepend(modeLabel);modeSelect.addEventListener('change',()=>{mode=modeSelect.value;load(true);});
+ const modeLabel=document.createElement('label');modeLabel.textContent='Nguồn xem';const modeSelect=document.createElement('select');modeSelect.innerHTML='<option value="DATA">SSI DATA · nhận theo sự kiện</option><option value="EOD">Giá đóng cửa đã lưu · không realtime</option>';modeSelect.value=mode;modeLabel.append(modeSelect);q('#board-search').parentElement.parentElement.prepend(modeLabel);modeSelect.addEventListener('change',()=>{mode=modeSelect.value;load(true);});
  let revision=0,busy=false,timer=null,searchTimer=null,paint=null,stream=null,streamKey='',streamReady=false,lastGlobalScope=window.MarketState.value.scope;
  function scheduleRender(){if(paint==null)paint=requestAnimationFrame(()=>{paint=null;render();});}
  const rowNodes=new Map(),lastValues=new Map();
@@ -61,7 +61,7 @@
  }
  function closeStream(){++revision;if(stream)stream.close();stream=null;streamKey='';streamReady=false;}
  function connectStream(){
-  if(!window.EventSource||mode==='EOD'){closeStream();return;}
+  if(window.StaticLiquidity||!window.EventSource||mode==='EOD'){closeStream();return;}
   const key=new URLSearchParams({scope:state.scope,search:state.search,page:String(state.page),size:String(state.size)}).toString();
   if(key===streamKey&&stream)return;
   closeStream();streamKey=key;const current=++revision;
@@ -75,7 +75,7 @@
   if(force)closeStream();
   if(busy&&!force)return;
   connectStream();if(streamReady&&!force)return;
-  if(mode==='EOD'&&!force&&state.rows.some(r=>r.status==='eod'))return;
+  if(!window.StaticLiquidity&&mode==='EOD'&&!force&&state.rows.some(r=>r.status==='eod'))return;
   busy=true;const ticket=revision;
   try{const result=await request('/api/market/board?'+new URLSearchParams({scope:state.scope,search:state.search,page:String(state.page),size:String(state.size),mode}));if(ticket===revision)accept(result);}
   catch(error){if(ticket!==revision)return;q('#board-status').textContent=error.message+' · Các giá đang hiển thị không phải dữ liệu mới.';for(const tr of rowNodes.values()){tr.dataset.state='offline';tr.lastChild.textContent='Không cập nhật';}}
@@ -95,5 +95,5 @@
  window.addEventListener('market-state-change',()=>{const next=window.MarketState.value.scope;if(next===lastGlobalScope)return;lastGlobalScope=next;state.scope=next||'INDEX:VN30';syncScope();state.page=1;if(location.hash==='#book')load(true);});
  window.addEventListener('hashchange',()=>{if(location.hash==='#book'){syncScope();load();}else closeStream();});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)closeStream();else load();});
- syncScope();load();timer=setInterval(load,1000);
+ syncScope();load();timer=setInterval(load,window.StaticLiquidity?3000:1000);
 })();
