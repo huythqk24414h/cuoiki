@@ -1,0 +1,1 @@
+{"framework":null,"buildCommand":"node scripts/build_vercel_demo.mjs","outputDirectory":"public-demo","headers":[{"source":"/prices.json","headers":[{"key":"Cache-Control","value":"no-cache"}]}]}

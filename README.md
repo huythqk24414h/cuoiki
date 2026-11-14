@@ -37,3 +37,22 @@ Trang Phân tích có mục Theo dõi trong ngày với 15 phút/1 giờ/4 giờ
 Trang Cảnh báo có bộ quan sát độ sâu60giây, lấy mẫu1giây và xác nhận đợt thấp15giây sau khi cửa sổ đủ dữ liệu. Chưa phải dự báo H1; thiếu hợp đồng xác minh đơn vị thì BLOCKED, không tạo xác suất. Nhật ký ở data/depth_watch; API /api/market/depth-warning. Nến ở data/intraday và /api/market/intraday.
 
 Kiểm thử mới:111 Python,22 JavaScript đạt. Gói liquidity-lab_LOCAL_SAMPLE.zip chứa snapshot SSI nhỏ để kiểm tra offline, không .env; thử bản giải nén trả207dòng SSI. Gói chỉ dành sử dụng theo quyền SSI, không phải kho đầy đủ2022–2026. Không tự phân phối công khai. Xem docs/INTRADAY_60S_HTTP.json.
+
+## Demo tinh tren Vercel
+
+Build: `node scripts/build_vercel_demo.mjs`. Vercel serves `public-demo/`.
+The demo includes closing prices and an order-book calculator. Its initial
+snapshot is labeled simulated. The full local dashboard is launched separately.
+
+Import this repository into Vercel with its root left at the repository root.
+On GitHub, configure `SSI_API_KEY` and `SSI_API_SECRET` as Actions secrets.
+Set `SSI_PUBLISH_EOD=true` as an Actions variable after confirming that the
+selected closing prices may be shown on the demo. Set `SSI_EOD_SYMBOLS` to
+override the default SSI,HPG,FPT list.
+
+In Vercel, create a Deploy Hook for the production branch and save its URL as
+the GitHub Actions secret `VERCEL_DEPLOY_HOOK`. The workflow **SSI Demo
+Closing Prices** runs at 16:37 Vietnam time on weekdays or from **Run workflow**.
+It validates a complete batch for the current session before publishing.
+A failed fetch keeps the previously published snapshot. Raw order-book files
+are handled separately by **SSI Live Capture**.
