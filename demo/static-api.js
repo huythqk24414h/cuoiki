@@ -1,44 +1,6 @@
 'use strict';
 window.StaticLiquidity = (() => {
-  const snapshot = fetch('/prices.json', {cache:'no-cache'}).then(response => {
-    if (!response.ok) throw Error('Không tải được bảng giá.');
-    return response.json();
-  });
   const unavailable = 'Tính năng này cần dữ liệu SSI trong ứng dụng chạy trên máy.';
-  function simulatedRows(symbol) {
-    const rows = [];
-    let close = 24500;
-    const changes = [120,-80,190,-230,50,140,-110];
-    for (let day = new Date('2026-08-03T00:00:00Z'); rows.length < 75; day.setUTCDate(day.getUTCDate()+1)) {
-      if ([0,6].includes(day.getUTCDay())) continue;
-      const i = rows.length;
-      const open = close;
-      close += changes[(i+Math.floor(i/7))%changes.length];
-      const volume = 90000 + (i*7919)%42000 + (i%17===0 ? 190000 : 0);
-      const history = rows.slice(-20);
-      const average = history.length===20 ? history.reduce((sum,row)=>sum+row.volume_shares,0)/20 : null;
-      const change = i ? (close/open-1)*100 : null;
-      const returns = [...rows.slice(-19).map(row=>row.return_pct),change];
-      const mean = returns.reduce((sum,value)=>sum+value,0)/20;
-      const volatility = i>=20 ? Math.sqrt(returns.reduce((sum,value)=>sum+(value-mean)**2,0)/19) : null;
-      rows.push({symbol,date:day.toISOString().slice(0,10),open_vnd:open,close_vnd:close,
-        high_vnd:Math.max(open,close)+120,low_vnd:Math.min(open,close)-100,
-        volume_shares:volume,relative_volume20:average && volume/average,
-        volume_avg20_previous:average,volatility20_pct:volatility,return_pct:change,
-        price_adjustment:'simulation',upstream_source:'Dữ liệu mô phỏng'});
-    }
-    return rows;
-  }
-  const history = simulatedRows('DEMO');
-  const first = history[0].date, last = history.at(-1).date;
-  const range = {start:first,end:last,actual_first:first,actual_last:last};
-  function historicalRows(q) {
-    let rows = history.filter(row=>row.date <= (q.get('to') || last) && row.date >= (q.get('from') || first));
-    const periods = {'1D':1,'5D':5,'1W':5,'1M':22,'3M':66};
-    const size = periods[q.get('range')];
-    if (size) rows = rows.slice(-size);
-    return rows;
-  }
   function aggregate(rows, resolution) {
     if (resolution === '1D') return rows;
     const periods = new Map();
@@ -145,62 +107,26 @@ window.StaticLiquidity = (() => {
     const endpoint=path.split('/').at(-1);
     if(endpoint==='board'&&q.get('mode')==='DATA') return liveBoard(q);
     if(endpoint==='intraday') {
-      const live=await load('live').catch(()=>null);
-      const points=live?.recent_trades?.[q.get('symbol')]||[];
-      const span={'15m':15,'1h':60,'4h':240}[q.get('resolution')]||15;
-      const candles=new Map();
-      for (const [time,price] of points) {
-        const date=new Date(time);
-        const session=date.getUTCHours()>=6 ? 6 : 2;
-        const anchor=new Date(time.slice(0,10)+'T00:00:00Z').getTime()+session*3600000;
-        const bucket=anchor+Math.floor((date-anchor)/(span*60000))*span*60000;
-        const timestamp=new Date(bucket+7*3600000).toISOString().slice(0,19)+'+07:00';
-        const value=Number(price), candle=candles.get(timestamp);
-        if(candle){candle.high=Math.max(candle.high,value);candle.low=Math.min(candle.low,value);candle.close=value;}
-        else candles.set(timestamp,{timestamp,open:value,high:value,low:value,close:value});
-      }
-      const current=Date.now()-Date.parse(live?.updated_at);
-      return {rows:[...candles.values()],last_source_time:points.at(-1)?.[0],retrieved_at:live?.updated_at,
-        status:points.length?(current>=0&&current<=15000?'SSI · Nến tạm từ bản tin khớp nhận được':'SSI · Dữ liệu đã lưu'):'Chờ bản tin SSI'};
+      const snapshot=await load('intraday');
+      const rows=snapshot?.symbols?.[q.get('symbol')]?.[q.get('resolution')]||[];
+      return {rows,last_source_time:rows.at(-1)?.closed_at,retrieved_at:snapshot?.updated_at,
+        status:rows.length?'SSI · Nến đã đóng':'Chưa có nến SSI cho mã này'};
     }
     const published=await catalog();
     if(published&&['meta','catalog','series','index','insights'].includes(endpoint))
       return historyResponse(endpoint,q,published);
-    const data = await snapshot;
-    const real = data.source === 'SSI FastConnect';
+
+    const real = Boolean(published);
     const closing=published ? Object.entries(published.symbols)
-      .filter(([symbol])=>!published.indexes.includes(symbol)).map(([,entry])=>entry.close) : data.rows;
+      .filter(([symbol])=>!published.indexes.includes(symbol)).map(([,entry])=>entry.close) : [];
     const latest=published||real ? closing.map(row=>row.date).sort().at(-1) : null;
     if (path === '/api/market/status') return {
       status:'Bản web EOD', snapshot_asof:latest,
       disabled_reason:'Bản web sử dụng bảng giá đóng cửa do GitHub Actions cập nhật.',
       measurement_reason:'Dữ liệu sổ lệnh trong phiên xem trên ứng dụng chạy trên máy.'
     };
-    const rows = historicalRows(q);
-    if (path === '/api/market/meta') return {
-      available:true,status:'MÔ PHỎNG',asof_date:last,last_available_session:last,
-      loaded_symbols:['DEMO'],historical_range:range,issues:[],
-      manifest:{dataset_type:'simulation',row_count:history.length,
-        adjustment_policy:'simulation',upstream_sources:[{name:'Dữ liệu mô phỏng'}]}
-    };
-    if (path === '/api/market/catalog') return {
-      securities:[{symbol:'DEMO',symbolNameVi:'Cổ phiếu mô phỏng',board:'HOSE',stockType:'Stock'}],
-      indexes:[{index:'DEMO-INDEX',indexName:'Chỉ số mô phỏng'}],
-      index_memberships:{'DEMO-INDEX':['DEMO']}
-    };
-    if (path === '/api/market/series') {
-      const resolution=q.get('resolution') || '1D';
-      return {available:true,rows:aggregate(rows,resolution),summary:rows.at(-1),
-        last_available_session:rows.at(-1)?.date,resolution,unit_status:'Mô phỏng'};
-    }
-    if (path === '/api/market/index') return {source:'Dữ liệu mô phỏng',rows:rows.map(row=>({
-      tradingDate:row.date,indexValue:row.close_vnd/20,indexChange:(row.close_vnd-row.open_vnd)/20,
-      indexChangePercentage:row.return_pct
-    }))};
-    if (path === '/api/market/insights') return {paragraphs:['Biểu đồ và chỉ số sử dụng chuỗi giá mô phỏng để minh họa cách tính.']};
-    if (path === '/api/market/coverage' || path === '/api/market/rankings')
-      throw Error('Bản mô phỏng có một mã minh họa. Độ phủ và xếp hạng cần dữ liệu thị trường.');
-
+    if(endpoint==='meta') return {available:false,issues:['Chưa có lịch sử SSI được công bố.']};
+    if(endpoint==='coverage'||endpoint==='rankings') throw Error('Chưa có phạm vi thị trường đã xác minh.');
     if (path === '/api/market/alerts') return {status:'unavailable',rows:[]};
     if (path === '/api/market/research') return {status:'Chờ kiểm chứng',h1:'NOT_TESTED',recorded_days:[],counts:{}};
     if (path === '/api/market/board') {
@@ -213,9 +139,9 @@ window.StaticLiquidity = (() => {
         total_volume:row.volume, session:real || published ? 'EOD '+row.date : 'Mô phỏng', status:'eod', trade_status:'eod'
       }));
       return {mode:'EOD',rows:boardRows,page,pages,total:matching.length,catalog_total:closing.length,
-        units_note:real || published ? 'Giá và khối lượng theo đơn vị nguồn SSI.' : 'Dữ liệu mô phỏng.',
+        units_note:real || published ? 'Giá và khối lượng theo đơn vị nguồn SSI.' : 'Chưa có dữ liệu SSI.',
         view_note:'Bản web hiển thị các mã có trong snapshot.',
-        display_note:real || published ? 'Giá đóng cửa SSI · Ngày ghi ở mỗi mã.' : 'Dữ liệu mô phỏng · Minh họa bảng giá.'};
+        display_note:real || published ? 'Giá đóng cửa SSI · Ngày ghi ở mỗi mã.' : 'Chưa có bảng giá SSI được công bố.'};
     }
     throw Error(unavailable);
   }
