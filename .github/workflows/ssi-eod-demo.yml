@@ -1,0 +1,43 @@
+name: SSI Demo Closing Prices
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '37 9 * * 1-5'
+permissions:
+  contents: write
+concurrency:
+  group: ssi-eod-demo
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && vars.SSI_PUBLISH_EOD == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-ssi.txt
+      - name: Fetch and validate closing prices
+        env:
+          SSI_EOD_SYMBOLS: ${{ vars.SSI_EOD_SYMBOLS || 'SSI,HPG,FPT' }}
+          SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
+          SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
+        run: python -m scripts.update_demo_prices
+      - name: Commit and publish changed snapshot
+        id: snapshot
+        run: |
+          git add -- demo/prices.json
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Update SSI demo closing prices'
+          git push origin HEAD:main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Trigger Vercel deployment
+        if: steps.snapshot.outputs.changed == 'true'
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$VERCEL_DEPLOY_HOOK" ]; then
+            curl --fail --silent --output /dev/null --max-time 30 --request POST "$VERCEL_DEPLOY_HOOK"
+          fi
