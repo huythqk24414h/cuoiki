@@ -13,7 +13,7 @@ const html = (await readFile(page, 'utf8')).replace(
 );
 await writeFile(page, html.replace(
   '<main id="main" tabindex="-1">',
-  '<main id="main" tabindex="-1"><p class="helper">Xem nguồn và thời điểm cập nhật tại biểu đồ và bảng giá. Dữ liệu mô phỏng có nhãn riêng.</p>',
+  '<main id="main" tabindex="-1"><p class="helper">Xem nguồn và thời điểm cập nhật tại biểu đồ và bảng giá.</p>',
 ));
 const eod = new URL('eod-ui.js', output);
 const display = (await readFile(eod, 'utf8'))
@@ -28,7 +28,7 @@ const display = (await readFile(eod, 'utf8'))
 await writeFile(eod, display);
 const intra = new URL('intraday-ui.js', output);
 const intraSource = (await readFile(intra, 'utf8'))
-  .replace('Tự kiểm tra local mỗi 5 giây; tải SSI tối đa mỗi 60 giây theo mã. Nến đang hình thành có thể đổi. 4H tách nghỉ trưa nên có thể thiếu kỳ. Giá/KL giữ đơn vị nguồn. Không dùng nến để dựng sổ lệnh.', 'Kiểm tra bản tin mới mỗi 5 giây. Nến tạm được dựng từ mẫu giá khớp đã nhận và có thể thiếu giao dịch. Giá giữ đơn vị SSI.');
+  .replace('Tự kiểm tra local mỗi 5 giây; tải SSI tối đa mỗi 60 giây theo mã. Nến đang hình thành có thể đổi. 4H tách nghỉ trưa nên có thể thiếu kỳ. Giá/KL giữ đơn vị nguồn. Không dùng nến để dựng sổ lệnh.', 'Đọc các nến đã đóng từ OHLCV 1 phút của SSI. Job cập nhật định kỳ trong phiên.');
 await writeFile(intra, intraSource);
 
 const app = new URL('app.js', output);
