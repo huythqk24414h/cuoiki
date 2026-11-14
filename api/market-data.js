@@ -3,7 +3,7 @@ module.exports = async function (req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') return res.status(405).json({error:'Method not allowed'});
   const kind = req.query.kind;
-  if (!['history','series','live'].includes(kind)) return res.status(400).json({error:'Unknown dataset'});
+  if (!['history','series','live','intraday'].includes(kind)) return res.status(400).json({error:'Unknown dataset'});
   const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
   const token = process.env.KV_REST_API_READ_ONLY_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return res.status(503).json({error:'Market data store not configured'});
@@ -19,7 +19,7 @@ module.exports = async function (req, res) {
     if (error) throw Error('Store read failed');
       return result ? JSON.parse(result) : null;
     }
-    let data = await read('liquiditylab:'+(kind === 'live' ? 'live' : 'history'));
+    let data = await read('liquiditylab:'+(kind === 'series' ? 'history' : kind));
     if (kind === 'series') {
       const symbol = req.query.symbol;
       if (typeof symbol !== 'string' || !/^[A-Z0-9]{1,12}$/.test(symbol))
