@@ -1,10 +1,11 @@
 """Refresh verified SSI minute bars and publish closed HOSE candles."""
+import json
 import os
 import re
 import time
 from datetime import datetime, timedelta
 
-from scripts.market_store import publish
+from scripts.market_store import publish, redis
 from src.intraday import aggregate, normalize
 from src.ssi_client import SSIReadonly, safe_error
 from src.ssi_stream import VN
@@ -76,6 +77,10 @@ def main():
                 raise ValueError("No closed SSI bars for "+symbol)
             data[symbol] = candles
             print(symbol,len(rows),candles["15m"][-1]["timestamp"],flush=True)
+        current = json.loads(redis(["GET", "liquiditylab:intraday"]) or "{}")
+        if current.get("symbols") == data:
+            print("No changed closed SSI candles. Keeping the published snapshot timestamp.", flush=True)
+            return
         publish("intraday",{"source":"SSI FastConnect V3 1m OHLCV","updated_at":now.isoformat(),"symbols":data})
     except Exception as error:
         diagnostic = str(error) if isinstance(error, ValueError) else safe_error(error)
