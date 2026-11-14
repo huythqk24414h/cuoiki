@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiquidityLab | Demo</title><link rel="stylesheet" href="demo.css"><script defer src="calculator-core.js"></script><script defer src="demo.js"></script></head>
+<body><main>
+<header><p class="brand">LiquidityLab</p><h1>Theo dõi thanh khoản cổ phiếu</h1></header>
+<section aria-labelledby="prices"><h2 id="prices">Giá đóng cửa</h2><p id="price-status" role="status">Đang tải bản giá…</p>
+<div class="table"><table><thead><tr><th>Mã</th><th>Phiên</th><th>Giá đóng cửa</th><th>Cao</th><th>Thấp</th><th>Khối lượng</th></tr></thead><tbody id="prices-body"></tbody></table></div></section>
+<section aria-labelledby="book"><h2 id="book">Tính chỉ số sổ lệnh</h2><p>Nhập giá VND/cổ phiếu và khối lượng tính bằng cổ phiếu. Mỗi bên nhận tối đa ba mức liên tiếp. Các giá trị điền sẵn là số liệu minh họa.</p>
+<form id="book-form"><label>Mã <input name="symbol" value="DEMO" maxlength="20" required></label>
+<div id="levels"></div><button>Tính chỉ số</button></form><p id="book-error" role="alert"></p><dl id="results" aria-live="polite"></dl></section>
+</main></body></html>
