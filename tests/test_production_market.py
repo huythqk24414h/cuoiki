@@ -1,3 +1,4 @@
+import json
 import unittest
 from datetime import date, datetime
 from decimal import Decimal
@@ -5,7 +6,7 @@ from unittest.mock import Mock, patch
 
 from scripts.market_universe import request
 from scripts.publish_intraday import closed_candles, merge_candles
-from scripts.publish_market_history import backfill
+from scripts.publish_market_history import FIELDS, backfill, prepare_symbol
 from src.eod_analytics import enrich_rows
 from src.ssi_stream import VN, book_metrics
 
@@ -75,3 +76,16 @@ class ProductionMarketTests(unittest.TestCase):
         self.assertAlmostEqual(float(metrics["imbalance"]), 566/1806)
         with self.assertRaises(ValueError):
             book_metrics(candidate, None, "LO", now)
+
+    def test_incremental_index_migrates_legacy_fields(self):
+        row=dict.fromkeys(field for field in FIELDS if field != "liquidation_days_100k_5pct")
+        row.update(symbol="VNINDEX", date="2026-11-13", close_vnd="1000")
+        client=Mock()
+        client.ohlc.return_value={"data":[]}
+        entry={"key":"legacy-index", "last":"2026-11-13"}
+        with patch("scripts.publish_market_history.redis", return_value=json.dumps([row])):
+            old, rows, rejected = prepare_symbol(client,"VNINDEX","VNINDEX",date(2000,7,28),
+                                                 date(2026,11,14),entry,False)
+        self.assertNotIn("liquidation_days_100k_5pct", old[0])
+        self.assertIsNone(rows[0]["liquidation_days_100k_5pct"])
+        self.assertFalse(rejected)

@@ -91,10 +91,12 @@ def prepare_symbol(client, symbol, provider, start, end, entry, full):
         print(f"{symbol}: quarantined {len(rejected)} malformed OHLCV bars "
               f"({min(rejected)} to {max(rejected)})", flush=True)
     quarantined = sorted((set(entry.get("quarantined_dates", ())) | rejected) - combined.keys()) if entry else sorted(rejected)
-    ordered = [combined[day] for day in sorted(combined)]
+    ordered = [dict(combined[day]) for day in sorted(combined)]
     if full and old and not {row["date"] for row in old if row["date"] >= start.isoformat()}.issubset(combined):
         raise ValueError("Full refresh would drop published dates")
     if symbol in INDEX_CODES:
+        for row in ordered:
+            row.setdefault("liquidation_days_100k_5pct", None)
         for previous, current in zip(ordered, ordered[1:]):
             current["return_pct"] = str((Decimal(current["close_vnd"])/Decimal(previous["close_vnd"])-1)*100)
     else:
