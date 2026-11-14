@@ -3,8 +3,15 @@
  'use strict';
  const q=s=>document.querySelector(s),body=q('#board-rows');if(!body)return;
  const state={page:1,size:30,scope:'INDEX:VN30',search:'',sort:'symbol',direction:1,rows:[]};
- let mode='DATA';
- const modeLabel=document.createElement('label');modeLabel.textContent='Nguồn xem';const modeSelect=document.createElement('select');modeSelect.innerHTML='<option value="DATA">SSI DATA · nhận theo sự kiện</option><option value="EOD">Giá đóng cửa đã lưu · không realtime</option>';modeLabel.append(modeSelect);q('#board-search').parentElement.parentElement.prepend(modeLabel);modeSelect.addEventListener('change',()=>{mode=modeSelect.value;load(true);});
+ const localMarketTime=new Intl.DateTimeFormat('en-GB',{
+  timeZone:'Asia/Ho_Chi_Minh',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'
+ }).formatToParts(new Date());
+ const part=type=>localMarketTime.find(item=>item.type===type)?.value;
+ const minute=Number(part('hour'))*60+Number(part('minute'));
+ const weekday=['Mon','Tue','Wed','Thu','Fri'].includes(part('weekday'));
+ const sessionHours=(minute>=540&&minute<690)||(minute>=780&&minute<900);
+ let mode=weekday&&sessionHours?'DATA':'EOD';
+ const modeLabel=document.createElement('label');modeLabel.textContent='Nguồn xem';const modeSelect=document.createElement('select');modeSelect.innerHTML='<option value="DATA">SSI DATA · nhận theo sự kiện</option><option value="EOD">Giá đóng cửa đã lưu · không realtime</option>';modeSelect.value=mode;modeLabel.append(modeSelect);q('#board-search').parentElement.parentElement.prepend(modeLabel);modeSelect.addEventListener('change',()=>{mode=modeSelect.value;load(true);});
  let revision=0,busy=false,timer=null,searchTimer=null,paint=null,stream=null,streamKey='',streamReady=false,lastGlobalScope=window.MarketState.value.scope;
  function scheduleRender(){if(paint==null)paint=requestAnimationFrame(()=>{paint=null;render();});}
  const rowNodes=new Map(),lastValues=new Map();

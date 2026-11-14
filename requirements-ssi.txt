@@ -1,1 +1,2 @@
 ssi-sdk==3.3.2
+socksio==1.0.0
