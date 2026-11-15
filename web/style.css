@@ -176,3 +176,5 @@ input,select,textarea{color-scheme:light}.demo-login{width:min(480px,calc(100vw 
 .global-market > .toolbar > label:has(input[type="date"]) { flex-basis: 145px; }
 .global-market > .toolbar > label:has(#market-resolution) { flex-basis: 78px; }
 .global-market > .toolbar > #refresh { flex: 0 0 auto; width: auto; min-height: 40px; white-space: nowrap; }
+
+#vn30-review{margin:0 0 18px}.review-summary{padding-left:20px;line-height:1.8}.review-tools{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:14px 0}.review-tools h3{margin:0 auto 0 0}.review-tools label{display:grid;gap:4px}.review-tools input,.review-tools select{min-width:125px}.review-table{overflow:auto;max-height:360px}.review-proof{width:min(720px,94vw);max-height:85vh;border:1px solid #c3d0dd;border-radius:14px;background:#fff;color:#17304a;padding:22px}.review-proof::backdrop{background:#10223888}

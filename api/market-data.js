@@ -46,6 +46,7 @@ module.exports = async function (req, res) {
       const entry = history?.symbols?.[symbol];
       data = entry ? await read(entry.key.replace(/^liquiditylab:/,'')) : null;
       if (entry && !data) throw Error('Missing stored series');
+      if (req.query.tail === '21' && Array.isArray(data)) data = data.slice(-21);
     } else if (kind === 'history') {
       data = await read(kind);
       if (data) for (const entry of Object.values(data.symbols)) delete entry.key;
