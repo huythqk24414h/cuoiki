@@ -23,9 +23,7 @@
     const ordered=hasCoverage ? [...members].sort((a,b)=>
       Number(b.symbol.toLowerCase()===needle)-Number(a.symbol.toLowerCase()===needle) ||
       Number(Boolean(b.daily_last))-Number(Boolean(a.daily_last))) : members;
-    const visible=hasCoverage ? ordered.slice(0,100) : ordered;
-    const chosen=members.find(row=>row.symbol===state.symbol);
-    if(chosen&&!visible.includes(chosen)) visible.push(chosen);
+    const visible=ordered;
     for(const row of visible){const option=node('option',`${row.symbol} · ${row.symbolNameVi||row.board} · ${row.stockType||'chưa phân loại'}${hasCoverage ? ' · '+(row.daily_last?'có EOD':'chưa có EOD')+(row.intraday_last?' · có nội ngày':'')+(row.status==='absent'||row.status==='ended'?' · ngoài danh mục hiện hành':'') : ''}`);option.value=row.symbol;select.append(option);}
     if(members.some(r=>r.symbol===state.symbol))select.value=state.symbol;
     else if(members.length){window.MarketState.set({symbol:ordered[0].symbol});}

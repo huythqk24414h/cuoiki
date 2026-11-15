@@ -16,6 +16,26 @@ window.StaticLiquidity = (() => {
     return [...periods.values()];
   }
 
+  function enrichArchive(rows) {
+    const returns = [];
+    return rows.map((row, i) => {
+      const prior = Number(rows[i-1]?.close_vnd);
+      const close = Number(row.close_vnd);
+      const change = prior > 0 && close > 0 ? (close/prior-1)*100 : null;
+      returns.push(change);
+      const previous = rows.slice(Math.max(0,i-20),i).map(r=>Number(r.volume_shares));
+      const average = previous.length===20 && previous.every(Number.isFinite)
+        ? previous.reduce((sum,v)=>sum+v,0)/20 : null;
+      const sample = returns.slice(-20);
+      const mean = sample.length===20 && sample.every(Number.isFinite)
+        ? sample.reduce((sum,v)=>sum+v,0)/20 : null;
+      return {...row,return_pct:change,volume_avg20_previous:average,
+        relative_volume20:average>0 ? Number(row.volume_shares)/average : null,
+        volatility20_pct:mean===null ? null : Math.sqrt(sample.reduce((sum,v)=>sum+(v-mean)**2,0)/19),
+        liquidation_days_100k_5pct:average>0 ? 100000/(0.05*average) : null};
+    });
+  }
+
   let catalogTime = 0, catalogPromise;
   const series = new Map();
   let archive;
@@ -105,6 +125,7 @@ window.StaticLiquidity = (() => {
         rows=[...merged.values()].sort((a,b)=>a.date.localeCompare(b.date));
       }
     }
+    if(path!=='index' && !data.symbols[symbol]) rows=enrichArchive(rows);
     rows=rows.filter(row=>row.date>='2022-01-01');
     const filter=q.get('range');
     const end=filter==='CUSTOM' ? q.get('to') || last : rows.at(-1)?.date || last;
