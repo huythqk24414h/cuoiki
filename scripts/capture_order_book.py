@@ -15,23 +15,23 @@ from src.ssi_client import SSIReadonly
 
 
 def main():
-    selected = os.environ.get("CAPTURE_SYMBOLS", "").strip().upper()
-    if not selected or selected == "VN30":
-        client = SSIReadonly()
-        try:
-            client.authenticate()
-            rows = client.get("/api/v3/data/securitiesByBoard", {"index":"VN30"})
-            selected = ",".join(row["symbol"] for row in rows)
-        finally:
-            client.close()
-    symbols = sorted({symbol.strip() for symbol in selected.split(",")})
-    if not 1 <= len(symbols) <= 30 or any(not re.fullmatch(r"[A-Z0-9]{1,12}", s) for s in symbols):
-        raise SystemExit("Specify VN30 or up to 30 HOSE ticker symbols.")
+    client = SSIReadonly()
+    try:
+        client.authenticate()
+        rows = client.get("/api/v3/data/securitiesByBoard", {"index":"VN30"})
+        symbols = sorted({row["symbol"] for row in rows})
+    finally:
+        client.close()
+    if len(symbols) != 30 or any(not re.fullmatch(r"[A-Z0-9]{1,12}", s) for s in symbols):
+        raise SystemExit("SSI did not return 30 valid VN30 constituents.")
+    print("SSI VN30:", ",".join(symbols), flush=True)
 
     now = datetime.now(VN)
     if now.weekday() >= 5:
         print("Weekend in Vietnam. Select a trading day.")
         return
+    if now.time() < clock_time(8, 55):
+        raise SystemExit("Start at or after 08:55 ICT to fit the hosted runner time limit.")
     windows = ((clock_time(9), clock_time(11, 30)), (clock_time(13), clock_time(14, 45)))
     failures = []
     for opens, closes in windows:
@@ -47,7 +47,7 @@ def main():
 
 def capture_session(symbols, day, opens, deadline):
     start = datetime.combine(day, opens, VN)
-    if now < start:
+    if datetime.now(VN) < start:
         print(f"Waiting for the session at {start.isoformat()}.", flush=True)
         while datetime.now(VN) < start:
             time.sleep(min(30, max(0, (start - datetime.now(VN)).total_seconds())))

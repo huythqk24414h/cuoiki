@@ -1,13 +1,8 @@
 name: SSI Live Capture
 on:
   workflow_dispatch:
-    inputs:
-      symbols:
-        description: Comma-separated HOSE symbols (blank uses repository setting)
-        type: string
   schedule:
     - cron: '57 1 * * 1-5'
-    - cron: '57 5 * * 1-5'
 permissions:
   contents: read
 concurrency:
@@ -15,13 +10,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   capture:
-    runs-on: [self-hosted, Windows, X64, ssi-capture]
-    timeout-minutes: 720
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
     env:
       SSI_PUBLISH_LIVE: ${{ vars.SSI_PUBLISH_LIVE }}
       UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
       UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
-      CAPTURE_SYMBOLS: ${{ inputs.symbols || vars.SSI_CAPTURE_SYMBOLS || 'SSI' }}
       SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
       SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
     steps:
