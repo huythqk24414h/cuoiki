@@ -2,7 +2,7 @@
 (function(){
  'use strict';
  const q=s=>document.querySelector(s),body=q('#board-rows');if(!body)return;
- const state={page:1,size:30,scope:'ALL',search:'',sort:'symbol',direction:1,rows:[]};
+ const state={page:1,size:30,scope:'INDEX:VN30',search:'',sort:'symbol',direction:1,rows:[]};
  const localMarketTime=new Intl.DateTimeFormat('en-GB',{
   timeZone:'Asia/Ho_Chi_Minh',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'
  }).formatToParts(new Date());
@@ -51,7 +51,7 @@
   }
   if(!ordered.length){const tr=el('tr'),td=el('td','Không có mã khớp bộ lọc.');tr.dataset.empty='true';td.colSpan=29;tr.append(td);body.append(tr);}
  }
- function syncScope(){const value=state.scope;state.scope=value;const select=q('#board-scope');if(![...select.options].some(o=>o.value===value)){const option=el('option',value.startsWith('INDEX:')?'Chỉ số '+value.slice(6):value);option.value=value;select.append(option);}select.value=value;}
+ function syncScope(){const value=window.StaticLiquidity?'INDEX:VN30':state.scope;state.scope=value;const select=q('#board-scope');if(![...select.options].some(o=>o.value===value)){const option=el('option',value.startsWith('INDEX:')?'Chỉ số '+value.slice(6):value);option.value=value;select.append(option);}select.value=value; if(window.StaticLiquidity){for(const option of [...select.options])if(option.value!==value)option.remove();}}
  function accept(result){
    const group=body.closest('table').querySelector('th[colspan="4"]');if(group)group.textContent=result.mode==='EOD'?'Cuối ngày (EOD)':'Khớp lệnh';
    state.rows=result.rows;state.page=result.page;scheduleRender();
@@ -94,9 +94,9 @@
   const button=el('button',title+' ↕ (trang này)','button secondary');button.type='button';button.onclick=()=>{state.direction=state.sort===key?-state.direction:1;state.sort=key;scheduleRender();};controls.append(button);
  }
  q('#board-search').addEventListener('input',e=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{state.search=e.target.value;state.page=1;rowNodes.forEach(n=>n.remove());rowNodes.clear();lastValues.clear();load(true);},250);});
- q('#board-scope').addEventListener('change',e=>{state.page=1;state.scope=e.target.value;window.MarketState.set({scope:e.target.value});load(true);});
+ q('#board-scope').addEventListener('change',e=>{if(window.StaticLiquidity)return;state.page=1;state.scope=e.target.value;window.MarketState.set({scope:e.target.value});load(true);});
  q('#board-page-prev').onclick=()=>{state.page--;load(true);};q('#board-page-next').onclick=()=>{state.page++;load(true);};
- window.addEventListener('market-state-change',()=>{const next=window.MarketState.value.scope;if(next===lastGlobalScope)return;lastGlobalScope=next;state.scope=next||'ALL';syncScope();state.page=1;if(location.hash==='#book')load(true);});
+ window.addEventListener('market-state-change',()=>{if(window.StaticLiquidity)return;const next=window.MarketState.value.scope;if(next===lastGlobalScope)return;lastGlobalScope=next;state.scope=next||'ALL';syncScope();state.page=1;if(location.hash==='#book')load(true);});
  window.addEventListener('hashchange',()=>{if(location.hash==='#book'){syncScope();load();}else closeStream();});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)closeStream();else load();});
  syncScope();load();timer=setInterval(load,window.StaticLiquidity?3000:1000);

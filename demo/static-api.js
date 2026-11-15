@@ -61,17 +61,25 @@ window.StaticLiquidity = (() => {
     }
     return catalogPromise;
   }
+  let directoryCache;
+  function marketDirectory() {
+    const now = Date.now();
+    if (!directoryCache || now-directoryCache.time>=60000) {
+      directoryCache={time:now,data:load('catalog').catch(error=>{directoryCache=undefined;throw error;})};
+    }
+    return directoryCache.data;
+  }
   async function historyResponse(path, q, data) {
     const symbols = Object.keys(data.symbols);
     const equities = symbols.filter(s=>!data.indexes.includes(s));
     const last = symbols.map(s=>data.symbols[s].last).sort().at(-1);
     const first = symbols.map(s=>data.symbols[s].first).sort()[0];
     if(path==='meta') return {available:true,status:'SSI FastConnect',asof_date:last,last_available_session:last,
-      loaded_symbols:equities,issues:[],historical_range:{start:'2022-01-01',end:last,actual_first:first,actual_last:last},
+      loaded_symbols:equities,issues:[],historical_range:{start:first,end:last,actual_first:first,actual_last:last},
       manifest:{upstream_sources:[{name:'SSI FastConnect V3'}],adjustment_policy:'unknown',
         retrieved_at_utc:data.updated_at,row_count:symbols.reduce((n,s)=>n+data.symbols[s].count,0)}};
     if(path==='catalog') {
-      const directory=await load('catalog');
+      const directory=await marketDirectory();
       const saved=await archiveCatalog();
       const combined=new Map(Object.values(saved).map(row=>[row.symbol,{...row,daily_last:row.last}]));
       for(const row of directory?.securities||equities.map(symbol=>({symbol,board:'HOSE',stockType:'Stock',daily_last:data.symbols[symbol].last}))) {
@@ -83,7 +91,7 @@ window.StaticLiquidity = (() => {
     }
     if(path==='insights') {
       const day=q.get('date');
-      const payload=await historyResponse('series',new URLSearchParams({symbol:q.get('symbol')||'',from:day||'',to:day||''}),data);
+      const payload=await historyResponse('series',new URLSearchParams({symbol:q.get('symbol')||'',range:'CUSTOM',from:day||'',to:day||''}),data);
       const value=payload.summary?.liquidation_days_100k_5pct;
       return {paragraphs:[value!=null&&Number.isFinite(Number(value))
         ? 'Ước lượng thoát 100.000 cổ phiếu ở mức tham gia 5% khối lượng bình quân 20 phiên trước: '+
@@ -126,7 +134,9 @@ window.StaticLiquidity = (() => {
       }
     }
     if(path!=='index' && !data.symbols[symbol]) rows=enrichArchive(rows);
-    rows=rows.filter(row=>row.date>='2022-01-01');
+    const members=(await marketDirectory())?.index_memberships?.VN30||[];
+    const lower=symbol==='VN30'||members.includes(symbol) ? '2000-07-28' : '2022-01-01';
+    rows=rows.filter(row=>row.date>=lower);
     const filter=q.get('range');
     const end=filter==='CUSTOM' ? q.get('to') || last : rows.at(-1)?.date || last;
     rows=rows.filter(row=>row.date<=end&&row.date>=(filter==='CUSTOM' ? q.get('from') || first : first));
@@ -141,7 +151,7 @@ window.StaticLiquidity = (() => {
       last_available_session:summary?.date,message:(data.symbols[symbol]||saved||summary)?null:'Mã này chưa có lịch sử SSI được nạp.',unit_status:'Đơn vị nguồn SSI'+(omitted ? ' · '+omitted+' phiên OHLCV bị cách ly' : '')};
   }
   function boardMatches(row, q, members) {
-    const scope = q.get('scope') || 'ALL';
+    const scope = 'INDEX:VN30';
     const search = (q.get('search') || '').trim().toLocaleLowerCase('vi');
     return (scope==='ALL' || row.board===scope || (scope.startsWith('INDEX:') && members[scope.slice(6)]?.includes(row.symbol)))
       && [row.symbol,row.symbolNameVi,row.symbolNameEn].some(value=>String(value||'').toLocaleLowerCase('vi').includes(search));
@@ -151,7 +161,7 @@ window.StaticLiquidity = (() => {
     const data=await load('live').catch(()=>null);
     const age=Date.now()-Date.parse(data?.updated_at);
     const active=age>=0&&age<=15000;
-    const directory = await load('catalog');
+    const directory = await marketDirectory();
     const metadata = new Map((directory?.securities||[]).map(row=>[row.symbol,row]));
     const matching=(data?.rows||[]).map(row=>({...metadata.get(row.symbol), ...row}))
       .filter(row=>boardMatches(row,q,directory?.index_memberships||{}));
@@ -195,6 +205,8 @@ window.StaticLiquidity = (() => {
     const endpoint=path.split('/').at(-1);
     if(endpoint==='book') {
       const symbol=q.get('symbol');
+      if(!(await marketDirectory())?.index_memberships?.VN30?.includes(symbol))
+        return {symbol,available:false,status:'unavailable',reason:'Sổ lệnh chỉ phục vụ VN30.'};
       const snapshot=await load('live');
       const row=snapshot?.rows?.find(row=>row.symbol===symbol);
       const age=Date.now()-Date.parse(row?.quote_time);

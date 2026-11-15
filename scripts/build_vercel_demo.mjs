@@ -26,7 +26,7 @@ const html = (await readFile(page, 'utf8')).replace(
 await writeFile(page, html.replace(
   '<main id="main" tabindex="-1">',
   '<main id="main" tabindex="-1"><p class="helper">Xem nguồn và thời điểm cập nhật tại biểu đồ và bảng giá.</p>',
-));
+).replace('<div id="price-chart"', '<p class="helper">Do giới hạn dung lượng công bố, VN30 dùng lịch sử SSI từ phiên đầu nguồn có dữ liệu; các mã còn lại dùng từ 2022 đến nay.</p><div id="price-chart"'));
 const eod = new URL('eod-ui.js', output);
 const display = (await readFile(eod, 'utf8'))
   .replaceAll('Historical EOD · SSI', 'Lịch sử EOD')

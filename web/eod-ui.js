@@ -55,7 +55,10 @@
   window.addEventListener('market-state-change',()=>{
     Object.assign(state,window.MarketState.value);syncToolbar();
     if(state.meta?.available){filterCatalog();loadSeries();loadRankings();loadCoverage();loadIndex();}
-    const book=q('#book-symbol');if(book){if(![...book.options].some(o=>o.value===state.symbol)){const o=node('option',state.symbol);o.value=state.symbol;book.append(o);}book.value=state.symbol;book.dispatchEvent(new Event('change'));}
+    const book=q('#book-symbol');
+    if(book && [...book.options].some(o=>o.value===state.symbol)){
+      book.value=state.symbol;book.dispatchEvent(new Event('change'));
+    }
   });
   let revision = 0;
   let rankingRevision = 0;
@@ -337,8 +340,8 @@
       const types=q('#market-type');types.replaceChildren(node('option','Tất cả loại'));types.options[0].value='ALL';
       [...new Set(catalog.map(r=>r.stockType).filter(Boolean))].sort().forEach(type=>{const o=node('option',type);o.value=type;types.append(o);});
       const indices=q('#index-select');indices.replaceChildren();directory.indexes.forEach(r=>{const o=node('option',r.indexName||r.index);o.value=r.index;indices.append(o);});if(directory.indexes.some(r=>r.index==='VNINDEX'))indices.value='VNINDEX';
-      const book=q('#book-symbol');book.replaceChildren();catalog.forEach(r=>{const o=node('option',r.symbol);o.value=r.symbol;book.append(o);});
-      syncToolbar();filterCatalog();if(meta.historical_range&&state.range!=='CUSTOM'&&(!state.to||state.to==='2026-11-04')){window.MarketState.set({to:meta.historical_range.actual_last});}book.value=state.symbol;book.dispatchEvent(new Event('change'));
+      const book=q('#book-symbol');book.replaceChildren();catalog.filter(r=>!window.StaticLiquidity||memberships.VN30?.includes(r.symbol)).forEach(r=>{const o=node('option',r.symbol);o.value=r.symbol;book.append(o);});
+      syncToolbar();filterCatalog();if(meta.historical_range&&state.range!=='CUSTOM'&&(!state.to||state.to==='2026-11-04')){window.MarketState.set({to:meta.historical_range.actual_last});}if([...book.options].some(o=>o.value===state.symbol))book.value=state.symbol;book.dispatchEvent(new Event('change'));
       await Promise.all([loadSeries(),loadRankings(),loadCoverage(),loadIndex()]);
     } catch(error) {
       const message=`Không kết nối được ứng dụng local: ${error.message}. Kiểm tra chương trình đang chạy rồi chọn Đọc lại snapshot.`;
