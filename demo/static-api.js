@@ -135,7 +135,7 @@ window.StaticLiquidity = (() => {
     }
     if(path!=='index' && !data.symbols[symbol]) rows=enrichArchive(rows);
     const members=(await marketDirectory())?.index_memberships?.VN30||[];
-    const lower=symbol==='VN30'||members.includes(symbol) ? '2000-07-28' : '2022-01-01';
+    const lower=q.get('period')!=='recent'&&(symbol==='VN30'||members.includes(symbol)) ? '2000-07-28' : '2022-01-01';
     rows=rows.filter(row=>row.date>=lower);
     const filter=q.get('range');
     const end=filter==='CUSTOM' ? q.get('to') || last : rows.at(-1)?.date || last;
@@ -241,7 +241,37 @@ window.StaticLiquidity = (() => {
     };
     if(endpoint==='meta') return {available:false,issues:['Chưa có lịch sử SSI được công bố.']};
     if(endpoint==='coverage'||endpoint==='rankings') throw Error('Chưa có phạm vi thị trường đã xác minh.');
-    if (path === '/api/market/alerts') return {status:'unavailable',rows:[]};
+    if (endpoint==='depth-warning') {
+      const symbol=q.get('symbol');
+      const live=await load('live');
+      const row=live?.rows?.find(row=>row.symbol===symbol);
+      return {symbol,state:'Chưa đánh giá',valid_samples:0,samples:0,reason:row
+        ? 'Web có bản chụp sổ lệnh. Phép kiểm tra 60 giây cần chuỗi mẫu liên tục và đơn vị SSI đã xác minh.'
+        : 'Chưa có mẫu sổ lệnh đã công bố cho mã này. Phép kiểm tra 60 giây cần chuỗi mẫu liên tục và đơn vị SSI đã xác minh.'};
+    }
+    if(published && ['alerts','event-evidence'].includes(endpoint)) {
+      const symbol=q.get('symbol');
+      if(!symbol) return {status:'unavailable',rows:[]};
+      const date=q.get('date');
+      const to=date||q.get('to')||latest;
+      const params=new URLSearchParams({symbol,range:'CUSTOM',resolution:'1D',period:q.get('period')||'recent',to});
+      const series=await historyResponse('series',params,published);
+      const finite=row=>row.relative_volume20!=null&&Number.isFinite(Number(row.relative_volume20));
+      if(endpoint==='event-evidence') {
+        const row=series.rows.at(-1);
+        if(row?.date!==date || !finite(row)) throw Error('Chưa có bằng chứng RV20 cho phiên đã chọn.');
+        return {event_date_exact:true,facts:{symbol,date,rv20:row.relative_volume20},
+          context:series.rows.slice(-30),method:'SSI EOD / TB20 phiên trước',
+          paragraphs:['RV20 đo khối lượng tương đối của phiên.']};
+      }
+      const eligible=series.rows.filter(row=>(!q.get('from')||row.date>=q.get('from'))&&finite(row));
+      return {status:'evaluated',evaluated_observations:eligible.length,
+        rows:eligible.filter(row=>Number(row.relative_volume20)>=2).reverse().map(row=>({
+          symbol,timestamp:row.date,value:row.relative_volume20,volume:row.volume_shares,
+          baseline:row.volume_avg20_previous,threshold:Number(row.relative_volume20)>=3?3:2,
+          priority:Number(row.relative_volume20)>=3?'cao':'theo_doi'}))};
+    }
+    if(endpoint==='alerts') return {status:'unavailable',rows:[]};
     if (path === '/api/market/research') return {status:'Chờ kiểm chứng',h1:'NOT_TESTED',recorded_days:[],counts:{}};
     if (path === '/api/market/board') {
       const directory = published ? await historyResponse('catalog',q,published) : {securities:[],index_memberships:{}};

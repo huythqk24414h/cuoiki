@@ -9,10 +9,38 @@ concurrency:
   group: ssi-live-capture
   cancel-in-progress: false
 jobs:
-  capture:
+  morning:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 350
     env:
+      SSI_CAPTURE_SESSION: morning
+      SSI_PUBLISH_LIVE: ${{ vars.SSI_PUBLISH_LIVE }}
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
+      SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ssi-capture
+          clean: false
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install SSI SDK
+        working-directory: ssi-capture
+        run: python -m pip install -r requirements-ssi.txt
+      - name: Capture order book
+        working-directory: ssi-capture
+        run: python -m scripts.capture_order_book
+  afternoon:
+    needs: morning
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 250
+    env:
+      SSI_CAPTURE_SESSION: afternoon
       SSI_PUBLISH_LIVE: ${{ vars.SSI_PUBLISH_LIVE }}
       UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
       UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}

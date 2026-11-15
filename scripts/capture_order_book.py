@@ -30,19 +30,17 @@ def main():
     if now.weekday() >= 5:
         print("Weekend in Vietnam. Select a trading day.")
         return
-    if now.time() < clock_time(8, 55):
-        raise SystemExit("Start at or after 08:55 ICT to fit the hosted runner time limit.")
-    windows = ((clock_time(9), clock_time(11, 30)), (clock_time(13), clock_time(14, 45)))
-    failures = []
-    for opens, closes in windows:
-        deadline = datetime.combine(now.date(), closes, VN)
-        if datetime.now(VN) < deadline:
-            try:
-                capture_session(symbols, now.date(), opens, deadline)
-            except SystemExit as error:
-                failures.append(str(error))
-    if failures:
-        raise SystemExit("; ".join(failures))
+    session = os.environ.get("SSI_CAPTURE_SESSION", "morning")
+    windows = {"morning":(clock_time(9), clock_time(11, 30)),
+               "afternoon":(clock_time(13), clock_time(14, 45))}
+    opens, closes = windows[session]
+    if session == "morning" and now.time() < clock_time(6):
+        raise SystemExit("Start at or after 06:00 ICT to fit the hosted runner time limit.")
+    deadline = datetime.combine(now.date(), closes, VN)
+    if now >= deadline:
+        print(f"SSI {session}: session has ended; no capture.", flush=True)
+        return
+    capture_session(symbols, now.date(), opens, deadline)
 
 
 def capture_session(symbols, day, opens, deadline):

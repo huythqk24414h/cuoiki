@@ -20,7 +20,7 @@
   async function showEvidence(row,button){
     const ticket=++evidenceRevision;evidenceTrigger=button;drawer.hidden=false;drawer.focus();explanation.replaceChildren(el('p','Đang kiểm chứng bằng chứng…'));window.ChartKit.destroy(eventChart);q('#alert-evidence').textContent=JSON.stringify(row,null,2);
     try{
-      const sheet=await request('/api/market/event-evidence?'+new URLSearchParams({symbol:row.symbol,date:row.timestamp}));if(ticket!==evidenceRevision)return;
+      const sheet=await request('/api/market/event-evidence?'+new URLSearchParams({symbol:row.symbol,date:row.timestamp,...(window.StaticLiquidity?{period:window.MarketState.value.period}:{})}));if(ticket!==evidenceRevision)return;
       const matches=sheet.event_date_exact&&sheet.facts?.symbol===row.symbol&&sheet.facts?.date===row.timestamp&&String(sheet.facts?.rv20)===String(row.value);
       const validContext=Array.isArray(sheet.context)&&sheet.context.length>0&&sheet.context.every(r=>r.symbol===row.symbol&&r.date<=row.timestamp);
       if(!matches||!validContext){explanation.replaceChildren(el('h3','Bằng chứng chưa khớp sự kiện'),el('p','Ngày, mã, RV20 hoặc cửa sổ quan sát không khớp bản cảnh báo đang mở. Hãy đọc lại đánh giá; không diễn giải hoặc vẽ dữ liệu thay thế.'));return;}
@@ -116,7 +116,7 @@
     q('#alert-evidence-panel').hidden=true;
     const id=++alertRevision;q('#alert-refresh').disabled=true;q('#alert-status').textContent='Đang đánh giá snapshot local…';
     try{
-      const data=await request('/api/market/alerts?'+new URLSearchParams({symbol:window.MarketState.value.symbol||document.querySelector('#symbol-filter').value,from:window.MarketState.value.range==='CUSTOM'&&window.MarketState.value.from?window.MarketState.value.from:(window.HistoricalRange?.start||'2026-01-01'),to:window.MarketState.value.to||'2026-11-04'}));if(id!==alertRevision)return;
+      const data=await request('/api/market/alerts?'+new URLSearchParams({symbol:window.MarketState.value.symbol||document.querySelector('#symbol-filter').value,from:window.MarketState.value.range==='CUSTOM'&&window.MarketState.value.from?window.MarketState.value.from:(window.HistoricalRange?.start||'2026-01-01'),to:window.StaticLiquidity&&window.MarketState.value.range!=='CUSTOM'?(window.HistoricalRange?.actual_last||''):window.MarketState.value.to||'2026-11-04',...(window.StaticLiquidity?{period:window.MarketState.value.period}:{})}));if(id!==alertRevision)return;
       alerts=data.rows||[];page=1;
       alertHash=data.snapshot_sha256||null;
       const message=data.status==='evaluated'?`${data.evaluated_observations} quan sát đủ cửa sổ · ${alerts.length} sự kiện RV20≥2 · chỉ mã được chọn trong toolbar · đến ${window.MarketState.value.to||'ngày đã chọn'}.`:'Chưa đánh giá: thiếu snapshot SSI đã kiểm chứng.';
@@ -133,7 +133,7 @@
     q('#alert-refresh').disabled=false;q('#alert-evidence-panel').hidden=true;renderAlerts();q('#overview-alert-state').textContent=alertSummary;
   });
   window.addEventListener('eod-updated',event=>{
-    const hash=event.detail.meta?.manifest?.file_sha256?.['ohlcv_daily.csv'];if(hash&&hash!==alertHash)loadAlerts();
+    const hash=event.detail.meta?.manifest?.file_sha256?.['ohlcv_daily.csv'];if((window.StaticLiquidity&&location.hash==='#alerts')||(hash&&hash!==alertHash))loadAlerts();
   });
   function updateStatus(){return request('/api/market/status').then(data=>{
     const badge=q('.connection-details .status-badge');
@@ -145,7 +145,8 @@
     const steps=data.historical_probe||[];const auth=steps.find(r=>r.step==='auth');const ws=steps.find(r=>r.step==='DATA_quote_websocket');
     q('#ssi-connection-detail').textContent=`${data.disabled_reason||''} Kết nối: ${stateLabels[data.status]||data.status}. Đã nhận ${data.quote_events||0} quote, lưu ${data.persisted_snapshots||0} snapshot. ${data.measurement_reason||''} ${data.next_retry_at?'Tự thử lại: '+data.next_retry_at:''}${data.safe_error?` Lỗi: ${data.safe_error.error_type}, HTTP ${data.safe_error.http_status??'chưa có'}, mã ${data.safe_error.code||'—'}.`:''}`;
   }).catch(()=>{q('#ssi-connection-detail').textContent='Không đọc được trạng thái local. SSI không được gắn nhãn LIVE.';});}
-  window.addEventListener('market-state-change',loadAlerts);
+  window.addEventListener('market-state-change',()=>{if(!window.StaticLiquidity||location.hash==='#alerts')loadAlerts();});
+  window.addEventListener('hashchange',()=>{if(location.hash==='#alerts')loadAlerts();});
   loadBook();updateStatus();
   setInterval(()=>{if(!document.hidden){updateStatus();if(location.hash==='#book'&&!manualMode)loadBook();}},5000);
 }());

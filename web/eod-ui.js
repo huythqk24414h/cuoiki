@@ -8,9 +8,11 @@
   Object.assign(state,window.MarketState.value);
   let catalog=[], hasCoverage=false;
   let memberships={};
-  function params(){const s=window.MarketState.value;return new URLSearchParams({symbol:state.symbol,range:state.range,scope:s.scope,resolution:s.resolution,to:s.to,...(s.range==='CUSTOM'&&s.from?{from:s.from}:{})});}
+  function params(){const s=window.MarketState.value;return new URLSearchParams({symbol:state.symbol,range:state.range,scope:s.scope,resolution:s.resolution,period:s.period,to:s.to,...(s.range==='CUSTOM'&&s.from?{from:s.from}:{})});}
   function syncToolbar(){
     const s=window.MarketState.value;
+    q('#market-period-label').hidden=!window.StaticLiquidity;
+    q('#market-period').value=s.period==='vn30'?'vn30':'recent';
     for(const [id,key] of [['market-scope','scope'],['market-type','type'],['market-from','from'],['market-to','to'],['market-resolution','resolution']])q('#'+id).value=s[key];
     document.querySelectorAll('[data-range]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.range===s.range)));
     const page=location.hash.slice(1)||'monitor';
@@ -18,7 +20,7 @@
   }
   function filterCatalog(){
     const s=window.MarketState.value,needle=q('#market-search').value.trim().toLocaleLowerCase('vi');
-    const members=catalog.filter(r=>(s.scope==='ALL'||r.board===s.scope||(s.scope.startsWith('INDEX:')&&(memberships[s.scope.slice(6)]||[]).includes(r.symbol)))&&(s.type==='ALL'||r.stockType===s.type)&&(!needle||[r.symbol,r.symbolNameVi,r.symbolNameEn].some(v=>String(v||'').toLocaleLowerCase('vi').includes(needle))));
+    const members=catalog.filter(r=>(!window.StaticLiquidity||s.period!=='vn30'||memberships.VN30?.includes(r.symbol))&&(s.scope==='ALL'||r.board===s.scope||(s.scope.startsWith('INDEX:')&&(memberships[s.scope.slice(6)]||[]).includes(r.symbol)))&&(s.type==='ALL'||r.stockType===s.type)&&(!needle||[r.symbol,r.symbolNameVi,r.symbolNameEn].some(v=>String(v||'').toLocaleLowerCase('vi').includes(needle))));
     const select=q('#symbol-filter');select.replaceChildren();
     const ordered=hasCoverage ? [...members].sort((a,b)=>
       Number(b.symbol.toLowerCase()===needle)-Number(a.symbol.toLowerCase()===needle) ||
@@ -351,6 +353,11 @@
   q('#symbol-filter').addEventListener('change',event => window.MarketState.set({symbol:event.target.value}));
   q('#book-symbol').addEventListener('change',event=>window.MarketState.set({symbol:event.target.value}));
   for(const [id,key] of [['market-scope','scope'],['market-type','type'],['market-from','from'],['market-to','to'],['market-resolution','resolution']])q('#'+id).addEventListener('change',e=>window.MarketState.set({[key]:e.target.value,...((key==='from'||key==='to')?{range:'CUSTOM'}:{})}));
+  q('#market-period').addEventListener('change',event=>{
+    q('#market-search').value='';
+    const period=event.target.value;
+    window.MarketState.set({period,scope:'ALL',type:'ALL',from:'',range:period==='vn30'?'MAX':'1M'});
+  });
   q('#market-search').addEventListener('input',filterCatalog);
   q('#index-select').addEventListener('change',loadIndex);
   document.querySelectorAll('[data-range]').forEach(button => button.addEventListener('click',() => {
