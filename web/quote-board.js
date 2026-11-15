@@ -71,12 +71,15 @@
   stream.addEventListener('cycle',()=>{if(current!==revision)return;closeStream();if(location.hash==='#book'&&!document.hidden)connectStream();});
   stream.onerror=()=>{if(current!==revision)return;streamReady=false;q('#board-status').textContent='Luồng local đang kết nối lại; HTTP dự phòng giữ trạng thái và thời gian nguồn, không coi dữ liệu cũ là mới.';};
  }
+ let lastEodRequest=0;
  async function load(force=false){
   if(document.hidden||location.hash!=='#book'){closeStream();return;}
   if(force)closeStream();
   if(busy&&!force)return;
   connectStream();if(streamReady&&!force)return;
   if(!window.StaticLiquidity&&mode==='EOD'&&!force&&state.rows.some(r=>r.status==='eod'))return;
+  if(window.StaticLiquidity&&mode==='EOD'&&!force&&Date.now()-lastEodRequest<60000)return;
+  if(mode==='EOD')lastEodRequest=Date.now();
   busy=true;const ticket=revision;
   try{const result=await request('/api/market/board?'+new URLSearchParams({scope:state.scope,search:state.search,page:String(state.page),size:String(state.size),mode}));if(ticket===revision)accept(result);}
   catch(error){if(ticket!==revision)return;q('#board-status').textContent=error.message+' · Các giá đang hiển thị không phải dữ liệu mới.';for(const tr of rowNodes.values()){tr.dataset.state='offline';tr.lastChild.textContent='Không cập nhật';}}
