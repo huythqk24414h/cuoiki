@@ -349,7 +349,7 @@
   }
   q('#symbol-filter').addEventListener('change',event => window.MarketState.set({symbol:event.target.value}));
   q('#book-symbol').addEventListener('change',event=>window.MarketState.set({symbol:event.target.value}));
-  for(const [id,key] of [['market-scope','scope'],['market-type','type'],['market-from','from'],['market-to','to'],['market-resolution','resolution']])q('#'+id).addEventListener('change',e=>window.MarketState.set({[key]:e.target.value,...(key==='from'?{range:'CUSTOM'}:{})}));
+  for(const [id,key] of [['market-scope','scope'],['market-type','type'],['market-from','from'],['market-to','to'],['market-resolution','resolution']])q('#'+id).addEventListener('change',e=>window.MarketState.set({[key]:e.target.value,...((key==='from'||key==='to')?{range:'CUSTOM'}:{})}));
   q('#market-search').addEventListener('input',filterCatalog);
   q('#index-select').addEventListener('change',loadIndex);
   document.querySelectorAll('[data-range]').forEach(button => button.addEventListener('click',() => {
