@@ -56,7 +56,7 @@ window.StaticLiquidity = (() => {
           Number(value).toLocaleString('vi-VN',{maximumFractionDigits:2})+' phiên. Đây là kịch bản; thanh khoản, giá và khả năng khớp thực tế có thể thay đổi.'
         : 'Chưa đủ 20 phiên có dữ liệu và khối lượng bình quân dương để ước lượng số phiên thoát vị thế.']};
     }
-    const symbol=q.get('symbol');
+    const symbol=q.get('symbol')?.trim().toUpperCase();
     let rows=[];
     if(data.symbols[symbol]) {
       const cached=series.get(symbol);
@@ -68,8 +68,9 @@ window.StaticLiquidity = (() => {
       rows=await series.get(symbol).rows;
       if(!rows){series.delete(symbol);throw Error('Chuỗi SSI tạm thời chưa tải được.');}
     }
-    rows=rows.filter(row=>row.date<=(q.get('to')||last)&&row.date>=(q.get('from')||first));
     const filter=q.get('range');
+    const end=filter==='CUSTOM' ? q.get('to') || last : data.symbols[symbol]?.last || last;
+    rows=rows.filter(row=>row.date<=end&&row.date>=(filter==='CUSTOM' ? q.get('from') || first : first));
     const count={'1D':1,'5D':5,'1W':5,'1M':22,'3M':66,'6M':132,'1Y':264,'3Y':792,'5Y':1320}[filter];
     if(count) rows=rows.slice(-count);
     if(filter==='YTD'&&rows.length) rows=rows.filter(row=>row.date.slice(0,4)===rows.at(-1).date.slice(0,4));

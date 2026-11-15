@@ -20,12 +20,15 @@
     const s=window.MarketState.value,needle=q('#market-search').value.trim().toLocaleLowerCase('vi');
     const members=catalog.filter(r=>(s.scope==='ALL'||r.board===s.scope||(s.scope.startsWith('INDEX:')&&(memberships[s.scope.slice(6)]||[]).includes(r.symbol)))&&(s.type==='ALL'||r.stockType===s.type)&&(!needle||[r.symbol,r.symbolNameVi,r.symbolNameEn].some(v=>String(v||'').toLocaleLowerCase('vi').includes(needle))));
     const select=q('#symbol-filter');select.replaceChildren();
-    const visible=hasCoverage ? members.slice(0,100) : members;
+    const ordered=hasCoverage ? [...members].sort((a,b)=>
+      Number(b.symbol.toLowerCase()===needle)-Number(a.symbol.toLowerCase()===needle) ||
+      Number(Boolean(b.daily_last))-Number(Boolean(a.daily_last))) : members;
+    const visible=hasCoverage ? ordered.slice(0,100) : ordered;
     const chosen=members.find(row=>row.symbol===state.symbol);
     if(chosen&&!visible.includes(chosen)) visible.push(chosen);
     for(const row of visible){const option=node('option',`${row.symbol} · ${row.symbolNameVi||row.board} · ${row.stockType||'chưa phân loại'}${hasCoverage ? ' · '+(row.daily_last?'có EOD':'chưa có EOD')+(row.intraday_last?' · có nội ngày':'')+(row.status==='absent'||row.status==='ended'?' · ngoài danh mục hiện hành':'') : ''}`);option.value=row.symbol;select.append(option);}
     if(members.some(r=>r.symbol===state.symbol))select.value=state.symbol;
-    else if(members.length){state.symbol=members[0].symbol;window.MarketState.set({symbol:state.symbol});}
+    else if(members.length){window.MarketState.set({symbol:ordered[0].symbol});}
     select.disabled=!members.length;
     text('#universe-note',`${members.length}/${catalog.length} mã khớp. ${visible.length<members.length?'Nhập mã hoặc tên để tìm trong toàn bộ danh mục.':'Danh mục SSI hiện tại.'}`);
   }
