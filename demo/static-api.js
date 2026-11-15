@@ -140,11 +140,21 @@ window.StaticLiquidity = (() => {
     return {available:true,rows:aggregate(rows,resolution),summary,resolution,
       last_available_session:summary?.date,message:(data.symbols[symbol]||saved||summary)?null:'Mã này chưa có lịch sử SSI được nạp.',unit_status:'Đơn vị nguồn SSI'+(omitted ? ' · '+omitted+' phiên OHLCV bị cách ly' : '')};
   }
+  function boardMatches(row, q, members) {
+    const scope = q.get('scope') || 'ALL';
+    const search = (q.get('search') || '').trim().toLocaleLowerCase('vi');
+    return (scope==='ALL' || row.board===scope || (scope.startsWith('INDEX:') && members[scope.slice(6)]?.includes(row.symbol)))
+      && [row.symbol,row.symbolNameVi,row.symbolNameEn].some(value=>String(value||'').toLocaleLowerCase('vi').includes(search));
+  }
+
   async function liveBoard(q) {
     const data=await load('live').catch(()=>null);
     const age=Date.now()-Date.parse(data?.updated_at);
     const active=age>=0&&age<=15000;
-    const matching=(data?.rows||[]).filter(row=>row.symbol.includes((q.get('search')||'').trim().toUpperCase()));
+    const directory = await load('catalog');
+    const metadata = new Map((directory?.securities||[]).map(row=>[row.symbol,row]));
+    const matching=(data?.rows||[]).map(row=>({...metadata.get(row.symbol), ...row}))
+      .filter(row=>boardMatches(row,q,directory?.index_memberships||{}));
     const size=Number(q.get('size'))||30,pages=Math.max(1,Math.ceil(matching.length/size));
     const page=Math.min(pages,Number(q.get('page'))||1);
     const levels=side=>side.map(([price,quantity])=>({price,quantity}));
@@ -222,15 +232,32 @@ window.StaticLiquidity = (() => {
     if (path === '/api/market/alerts') return {status:'unavailable',rows:[]};
     if (path === '/api/market/research') return {status:'Chờ kiểm chứng',h1:'NOT_TESTED',recorded_days:[],counts:{}};
     if (path === '/api/market/board') {
-      const matching = closing.filter(row=>row.symbol.includes((q.get('search') || '').trim().toUpperCase()));
-      const size = Number(q.get('size')) || 30;
+      const directory = published ? await historyResponse('catalog',q,published) : {securities:[],index_memberships:{}};
+      const saved = await archiveCatalog();
+      const prices = new Map(closing.map(row=>[row.symbol,row]));
+      const matching = directory.securities.filter(row=>boardMatches(row,q,directory.index_memberships))
+        .sort((a,b)=>a.symbol.localeCompare(b.symbol));
+      const size = Math.min(50,Math.max(1,Number(q.get('size'))||30));
       const pages = Math.max(1,Math.ceil(matching.length / size));
-      const page = Math.min(pages,Number(q.get('page')) || 1);
-      const boardRows = matching.slice((page-1)*size,page*size).map(row=>({
-        symbol:row.symbol, bids:[], asks:[], last_price:row.close, high:row.high,low:row.low,
-        total_volume:row.volume, session:'EOD '+row.date, status:'eod', trade_status:'eod'
+      const page = Math.max(1,Math.min(pages,Number(q.get('page'))||1));
+      const boardRows = await Promise.all(matching.slice((page-1)*size,page*size).map(async ({symbol,board,symbolNameVi,stockType})=>{
+        let row = prices.get(symbol);
+        if (!row) {
+          const delta = await load('market-delta',symbol).catch(()=>null);
+          let last = delta?.rows?.at(-1);
+          if (!last && saved[symbol]) {
+            const response = await fetch('/eod-archive/'+encodeURIComponent(symbol)+'.json');
+            if(response.ok) last=(await response.json()).at(-1);
+          }
+          if(last) {
+            const [date,,high,low,close,volume]=last;
+            row={date,high,low,close,volume};
+          }
+        }
+        return {symbol,board,name:symbolNameVi,stock_type:stockType,topic_supported:true,bids:[],asks:[],last_price:row?.close,high:row?.high,low:row?.low,
+          total_volume:row?.volume,session:row?'EOD '+row.date:'Chưa có EOD',status:'eod',trade_status:'eod'};
       }));
-      return {mode:'EOD',rows:boardRows,page,pages,total:matching.length,catalog_total:closing.length,
+      return {mode:'EOD',rows:boardRows,page,pages,total:matching.length,catalog_total:directory.securities.length,
         units_note:published ? 'Giá và khối lượng theo đơn vị nguồn SSI.' : 'Chưa có dữ liệu SSI.',
         view_note:'Bản web hiển thị các mã có trong snapshot.',
         display_note:published ? 'Giá đóng cửa SSI · Ngày ghi ở mỗi mã.' : 'Chưa có bảng giá SSI được công bố.'};

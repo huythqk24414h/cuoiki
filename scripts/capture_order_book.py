@@ -11,28 +11,42 @@ from pathlib import Path
 
 from src.ssi_stream import DataStream, VN
 from scripts.market_store import publish
+from src.ssi_client import SSIReadonly
 
 
 def main():
-    symbols = set(os.environ.get("CAPTURE_SYMBOLS", "SSI").split(","))
-    symbols = sorted({symbol.strip().upper() for symbol in symbols})
-    if len(symbols) > 10 or any(not re.fullmatch(r"[A-Z0-9]{1,12}", s) for s in symbols):
-        raise SystemExit("Specify one to ten valid HOSE ticker symbols.")
+    selected = os.environ.get("CAPTURE_SYMBOLS", "").strip().upper()
+    if not selected or selected == "VN30":
+        client = SSIReadonly()
+        try:
+            client.authenticate()
+            rows = client.get("/api/v3/data/securitiesByBoard", {"index":"VN30"})
+            selected = ",".join(row["symbol"] for row in rows)
+        finally:
+            client.close()
+    symbols = sorted({symbol.strip() for symbol in selected.split(",")})
+    if not 1 <= len(symbols) <= 30 or any(not re.fullmatch(r"[A-Z0-9]{1,12}", s) for s in symbols):
+        raise SystemExit("Specify VN30 or up to 30 HOSE ticker symbols.")
 
     now = datetime.now(VN)
     if now.weekday() >= 5:
         print("Weekend in Vietnam. Select a trading day.")
         return
     windows = ((clock_time(9), clock_time(11, 30)), (clock_time(13), clock_time(14, 45)))
+    failures = []
     for opens, closes in windows:
         deadline = datetime.combine(now.date(), closes, VN)
-        if now < deadline:
-            break
-    else:
-        print("Today's capture sessions have ended.")
-        return
+        if datetime.now(VN) < deadline:
+            try:
+                capture_session(symbols, now.date(), opens, deadline)
+            except SystemExit as error:
+                failures.append(str(error))
+    if failures:
+        raise SystemExit("; ".join(failures))
 
-    start = datetime.combine(now.date(), opens, VN)
+
+def capture_session(symbols, day, opens, deadline):
+    start = datetime.combine(day, opens, VN)
     if now < start:
         print(f"Waiting for the session at {start.isoformat()}.", flush=True)
         while datetime.now(VN) < start:

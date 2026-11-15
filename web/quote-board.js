@@ -2,7 +2,7 @@
 (function(){
  'use strict';
  const q=s=>document.querySelector(s),body=q('#board-rows');if(!body)return;
- const state={page:1,size:30,scope:'INDEX:VN30',search:'',sort:'symbol',direction:1,rows:[]};
+ const state={page:1,size:30,scope:'ALL',search:'',sort:'symbol',direction:1,rows:[]};
  const localMarketTime=new Intl.DateTimeFormat('en-GB',{
   timeZone:'Asia/Ho_Chi_Minh',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'
  }).formatToParts(new Date());
@@ -34,7 +34,8 @@
    let tr=rowNodes.get(row.symbol);
    if(!tr){tr=el('tr');tr.append(el('td'));const button=el('button',row.symbol,'rank-symbol');button.type='button';button.onclick=()=>window.MarketState.set({symbol:row.symbol});tr.firstChild.append(button);for(let i=1;i<29;i++)tr.append(el('td'));rowNodes.set(row.symbol,tr);}
    tr.dataset.state=row.status;tr.firstChild.firstChild.title=`${row.name} · ${row.board} · loại SSI: ${row.stock_type}`;
-   const bs=[...row.bids].reverse(),as=row.asks;
+   const pad = side=>Array.from({length:3},(_,i)=>side?.[i]||{});
+   const bs=pad(row.bids).reverse(),as=pad(row.asks);
    const fields=[row.symbol,row.ceiling,row.floor,row.reference,row.session||'Chưa nhận cờ',...bs.flatMap(r=>[r.price,r.quantity]),row.last_price,row.last_quantity,row.change,row.change_pct,...as.flatMap(r=>[r.price,r.quantity]),row.total_volume,row.high,row.low,row.foreign_buy,row.foreign_sell,row.foreign_room,time(row.received_at),row.topic_supported?(labels[row.status]||row.status):'Topic không hỗ trợ'];
    const colors={1:'market-ceiling',2:'market-floor',3:'market-reference',11:row.colors?.last};
    [...(row.colors?.bids||[])].reverse().forEach((c,i)=>colors[5+i*2]=c);(row.colors?.asks||[]).forEach((c,i)=>colors[15+i*2]=c);
@@ -92,7 +93,7 @@
  q('#board-search').addEventListener('input',e=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{state.search=e.target.value;state.page=1;rowNodes.forEach(n=>n.remove());rowNodes.clear();lastValues.clear();load(true);},250);});
  q('#board-scope').addEventListener('change',e=>{state.page=1;state.scope=e.target.value;window.MarketState.set({scope:e.target.value});load(true);});
  q('#board-page-prev').onclick=()=>{state.page--;load(true);};q('#board-page-next').onclick=()=>{state.page++;load(true);};
- window.addEventListener('market-state-change',()=>{const next=window.MarketState.value.scope;if(next===lastGlobalScope)return;lastGlobalScope=next;state.scope=next||'INDEX:VN30';syncScope();state.page=1;if(location.hash==='#book')load(true);});
+ window.addEventListener('market-state-change',()=>{const next=window.MarketState.value.scope;if(next===lastGlobalScope)return;lastGlobalScope=next;state.scope=next||'ALL';syncScope();state.page=1;if(location.hash==='#book')load(true);});
  window.addEventListener('hashchange',()=>{if(location.hash==='#book'){syncScope();load();}else closeStream();});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)closeStream();else load();});
  syncScope();load();timer=setInterval(load,window.StaticLiquidity?3000:1000);
