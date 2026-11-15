@@ -1,3 +1,5 @@
+import { gunzipSync } from 'node:zlib';
+import { existsSync } from 'node:fs';
 import { cp, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 const output = new URL('../public-demo/', import.meta.url);
@@ -5,6 +7,16 @@ await mkdir(output, { recursive: true });
 await cp(new URL('../web/', import.meta.url), output, { recursive: true });
 for (const file of ['static-api.js']) {
   await copyFile(new URL('../demo/' + file, import.meta.url), new URL(file, output));
+}
+const archive = new URL('../demo/eod-archive.ndjson.gz', import.meta.url);
+if (existsSync(archive)) {
+  const target = new URL('eod-archive/', output);
+  await mkdir(target, {recursive:true});
+  for (const line of gunzipSync(await readFile(archive)).toString('utf8').trimEnd().split('\n')) {
+    const [name, rows] = JSON.parse(line);
+    if (!/^(catalog|[A-Z0-9]{1,12})\.json$/.test(name)) throw Error('Invalid archive filename');
+    await writeFile(new URL(name,target), JSON.stringify(rows));
+  }
 }
 const page = new URL('index.html', output);
 const html = (await readFile(page, 'utf8')).replace(

@@ -162,6 +162,8 @@ def update(client, now):
         print(f"{symbol}: {len(rows)} bars, {rows[0]['date']} to {latest['date']}; {size} bytes", flush=True)
     print(f"Daily coverage: {sum(symbol not in INDEX_CODES for symbol in series)} equities; "
           f"pending in configured universe: {sum(symbol not in series for symbol in symbols)}", flush=True)
+    from scripts.update_market_archive import update as update_archive
+    update_archive(client, end, directory, providers, backfill)
     if failures:
         raise ValueError("Failed SSI series: " + ",".join(failures))
     if not any(symbol in series for symbol in symbols):

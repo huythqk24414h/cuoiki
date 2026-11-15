@@ -18,6 +18,15 @@ window.StaticLiquidity = (() => {
 
   let catalogTime = 0, catalogPromise;
   const series = new Map();
+  let archive;
+  function archiveCatalog() {
+    return archive ??= fetch('/eod-archive/catalog.json').then(response=>{
+      if(response.status===404) return {};
+      if(!response.ok) throw Error('Không đọc được kho lịch sử SSI.');
+      if(!response.headers.get('content-type')?.includes('application/json')) return {};
+      return response.json();
+    }).catch(error=>{archive=undefined;throw error;});
+  }
   async function load(kind, symbol, resolution) {
     const q = new URLSearchParams({kind,...(symbol ? {symbol} : {}),...(resolution ? {resolution} : {})});
     const response = await fetch('/api/market-data?'+q,{cache:'no-store'});
@@ -38,12 +47,17 @@ window.StaticLiquidity = (() => {
     const last = symbols.map(s=>data.symbols[s].last).sort().at(-1);
     const first = symbols.map(s=>data.symbols[s].first).sort()[0];
     if(path==='meta') return {available:true,status:'SSI FastConnect',asof_date:last,last_available_session:last,
-      loaded_symbols:equities,issues:[],historical_range:{start:data.query_start,end:last,actual_first:first,actual_last:last},
+      loaded_symbols:equities,issues:[],historical_range:{start:'2022-01-01',end:last,actual_first:first,actual_last:last},
       manifest:{upstream_sources:[{name:'SSI FastConnect V3'}],adjustment_policy:'unknown',
         retrieved_at_utc:data.updated_at,row_count:symbols.reduce((n,s)=>n+data.symbols[s].count,0)}};
     if(path==='catalog') {
       const directory=await load('catalog');
-      return {securities:directory?.securities||equities.map(symbol=>({symbol,board:'HOSE',stockType:'Stock',daily_last:data.symbols[symbol].last})),
+      const saved=await archiveCatalog();
+      const combined=new Map(Object.values(saved).map(row=>[row.symbol,{...row,daily_last:row.last}]));
+      for(const row of directory?.securities||equities.map(symbol=>({symbol,board:'HOSE',stockType:'Stock',daily_last:data.symbols[symbol].last}))) {
+        combined.set(row.symbol,{...combined.get(row.symbol),...row,daily_last:row.daily_last||saved[row.symbol]?.last});
+      }
+      return {securities:[...combined.values()],
         indexes:symbols.filter(s=>data.indexes.includes(s)).map(index=>({index})),
         index_memberships:directory?.index_memberships||{}, coverage_available:true};
     }
@@ -58,18 +72,42 @@ window.StaticLiquidity = (() => {
     }
     const symbol=q.get('symbol')?.trim().toUpperCase();
     let rows=[];
+    const saved=path==='index' ? null : (await archiveCatalog())[symbol];
+    const version=data.symbols[symbol]?.revision||data.updated_at;
+    if(saved && !data.symbols[symbol]) {
+      if(!series.has(symbol)) {
+        if(series.size>=10) series.delete(series.keys().next().value);
+        const request=fetch('/eod-archive/'+encodeURIComponent(symbol)+'.json').then(async response=>{
+          if(!response.ok) throw Error('Không tải được chuỗi SSI từ kho lịch sử.');
+          return (await response.json()).map(([date,open_vnd,high_vnd,low_vnd,close_vnd,volume_shares])=>
+            ({symbol,date,open_vnd,high_vnd,low_vnd,close_vnd,volume_shares}));
+        }).catch(error=>{series.delete(symbol);throw error;});
+        series.set(symbol,{version,rows:request});
+      }
+      rows=await series.get(symbol).rows;
+    }
     if(data.symbols[symbol]) {
       const cached=series.get(symbol);
-      const version=data.symbols[symbol].revision||data.updated_at;
-      if(cached?.version!==version) {
+
+      if(!cached || cached.version!==version) {
         if(series.size>=10) series.delete(series.keys().next().value);
         series.set(symbol,{version,rows:load('series',symbol).catch(()=>null)});
       }
       rows=await series.get(symbol).rows;
       if(!rows){series.delete(symbol);throw Error('Chuỗi SSI tạm thời chưa tải được.');}
     }
+    if(path!=='index' && symbol && !data.symbols[symbol] && /^[A-Z0-9]{1,12}$/.test(symbol)) {
+      const delta=await load('market-delta',symbol);
+      if(delta?.rows?.length) {
+        const merged=new Map(rows.map(row=>[row.date,row]));
+        for(const [date,open_vnd,high_vnd,low_vnd,close_vnd,volume_shares] of delta.rows)
+          merged.set(date,{symbol,date,open_vnd,high_vnd,low_vnd,close_vnd,volume_shares});
+        rows=[...merged.values()].sort((a,b)=>a.date.localeCompare(b.date));
+      }
+    }
+    rows=rows.filter(row=>row.date>='2022-01-01');
     const filter=q.get('range');
-    const end=filter==='CUSTOM' ? q.get('to') || last : data.symbols[symbol]?.last || last;
+    const end=filter==='CUSTOM' ? q.get('to') || last : rows.at(-1)?.date || last;
     rows=rows.filter(row=>row.date<=end&&row.date>=(filter==='CUSTOM' ? q.get('from') || first : first));
     const count={'1D':1,'5D':5,'1W':5,'1M':22,'3M':66,'6M':132,'1Y':264,'3Y':792,'5Y':1320}[filter];
     if(count) rows=rows.slice(-count);
@@ -79,7 +117,7 @@ window.StaticLiquidity = (() => {
     const resolution=q.get('resolution')||'1D', summary=rows.at(-1);
     const omitted=data.symbols[symbol]?.quarantined_dates?.length || 0;
     return {available:true,rows:aggregate(rows,resolution),summary,resolution,
-      last_available_session:summary?.date,message:data.symbols[symbol]?null:'Mã này chưa có lịch sử SSI được nạp.',unit_status:'Đơn vị nguồn SSI'+(omitted ? ' · '+omitted+' phiên OHLCV bị cách ly' : '')};
+      last_available_session:summary?.date,message:(data.symbols[symbol]||saved||summary)?null:'Mã này chưa có lịch sử SSI được nạp.',unit_status:'Đơn vị nguồn SSI'+(omitted ? ' · '+omitted+' phiên OHLCV bị cách ly' : '')};
   }
   async function liveBoard(q) {
     const data=await load('live').catch(()=>null);
