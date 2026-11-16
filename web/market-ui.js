@@ -147,19 +147,27 @@
   }
   async function loadAlerts(){
     q('#alert-evidence-panel').hidden=true;
-    const id=++alertRevision;q('#alert-refresh').disabled=true;q('#alert-status').textContent='Đang đánh giá snapshot local…';
+    const id=++alertRevision;q('#alert-refresh').disabled=true;q('#alert-status').textContent='Đang đọc cảnh báo EOD…';
     try{
-      const data=await request('/api/market/alerts?'+new URLSearchParams({symbol:window.MarketState.value.symbol||document.querySelector('#symbol-filter').value,from:window.MarketState.value.range==='CUSTOM'&&window.MarketState.value.from?window.MarketState.value.from:(window.HistoricalRange?.start||'2026-01-01'),to:window.StaticLiquidity&&window.MarketState.value.range!=='CUSTOM'?(window.HistoricalRange?.actual_last||''):window.MarketState.value.to||'2026-11-04',...(window.StaticLiquidity?{period:window.MarketState.value.period}:{})}));if(id!==alertRevision)return;
+      const state=window.MarketState.value;
+      const symbol=state.symbol||q('#symbol-filter').value;
+      const from=q('#alert-from').value,to=q('#alert-to').value;
+      if(window.StaticLiquidity){const option=el('option',symbol||'Chưa chọn mã');option.value=symbol;q('#alert-symbol').replaceChildren(option);}
+      const params=window.StaticLiquidity ? {symbol,period:state.period,...(from?{from}:{}),...(to?{to}:{})}
+        : {symbol,from:from||state.from||window.HistoricalRange?.start||'2026-01-01',to:to||state.to};
+      const data=await request('/api/market/alerts?'+new URLSearchParams(params));if(id!==alertRevision)return;
       alerts=data.rows||[];page=1;
       alertHash=data.snapshot_sha256||null;
-      const message=data.status==='evaluated'?`${data.evaluated_observations} quan sát đủ cửa sổ · ${alerts.length} sự kiện RV20≥2 · chỉ mã được chọn trong toolbar · đến ${window.MarketState.value.to||'ngày đã chọn'}.`:'Chưa đánh giá: thiếu snapshot SSI đã kiểm chứng.';
+      const period=data.first_session&&data.last_session ? `${data.first_session} → ${data.last_session}` : '';
+      const message=data.status==='evaluated'?`${symbol} · ${data.evaluated_observations} phiên đủ dữ liệu RV20 · ${alerts.length} sự kiện${period?' · '+period:''}.`:'Chưa đánh giá: thiếu dữ liệu SSI.';
+      q('#alerts table caption').textContent=`SSI EOD · ${symbol||'chưa chọn mã'} · ${period||'chưa có phiên trong khoảng chọn'}`;
       alertSummary=message;
       q('#alert-status').textContent=message;q('#overview-alert-state').textContent=message;
       renderAlerts();
     }catch(error){if(id!==alertRevision)return;alerts=[];alertSummary='Chưa đánh giá: '+error.message;renderAlerts();q('#overview-alert-state').textContent='Chưa đánh giá · server local không phản hồi.';}
     finally{if(id===alertRevision)q('#alert-refresh').disabled=false;}
   }
-  ['alert-symbol','alert-priority','alert-from','alert-to'].forEach(id=>q('#'+id).addEventListener('change',()=>{page=1;q('#alert-evidence-panel').hidden=true;renderAlerts();}));
+  ['alert-symbol','alert-priority','alert-from','alert-to'].forEach(id=>q('#'+id).addEventListener('change',()=>{page=1;q('#alert-evidence-panel').hidden=true;if(window.StaticLiquidity&&['alert-from','alert-to'].includes(id))loadAlerts();else renderAlerts();}));
   q('#alert-prev').addEventListener('click',()=>{page--;renderAlerts();});q('#alert-next').addEventListener('click',()=>{page++;renderAlerts();});q('#alert-refresh').addEventListener('click',loadAlerts);
   window.addEventListener('historical-snapshot-unavailable',()=>{
     ++alertRevision;alerts=[];alertHash=null;alertSummary='Chưa đánh giá: snapshot SSI hiện tại không khả dụng.';
@@ -182,5 +190,5 @@
   window.addEventListener('market-state-change',()=>{if(!window.StaticLiquidity||location.hash==='#alerts')loadAlerts();});
   window.addEventListener('hashchange',()=>{if(location.hash==='#alerts')loadAlerts();});
   loadBook();updateStatus();
-  setInterval(()=>{if(!document.hidden){updateStatus();if(location.hash==='#book'&&!manualMode)loadBook();}},5000);
+  setInterval(()=>{if(!document.hidden)updateStatus();},5000);
 }());

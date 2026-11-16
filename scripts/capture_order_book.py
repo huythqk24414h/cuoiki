@@ -157,7 +157,9 @@ def capture_session(symbols, day, opens, deadline, session):
         if publisher:
             publisher.shutdown()
     if publish_live and session_books:
-        publish("book-" + session, {"date":day.isoformat(), "last_books":session_books})
+        archive = {"date":day.isoformat(), "last_books":session_books}
+        publish(f"book-archive:{day.isoformat()}:{session}:{path.stem}", archive, ttl=90*86400)
+        publish("book-" + session, archive)
     if pending:
         pending.result()
     print("Fresh two-sided quote samples:", counts, "| Raw records dropped:", stream.dropped)

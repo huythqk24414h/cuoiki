@@ -303,8 +303,11 @@ window.StaticLiquidity = (() => {
           context:series.rows.slice(-30),method:'SSI EOD / TB20 phiên trước',
           paragraphs:['RV20 đo khối lượng tương đối của phiên.']};
       }
-      const eligible=series.rows.filter(row=>(!q.get('from')||row.date>=q.get('from'))&&finite(row));
+      let selected=series.rows.filter(row=>!q.get('from')||row.date>=q.get('from'));
+      if(!q.get('from')&&!q.get('to')) selected=selected.slice(-22);
+      const eligible=selected.filter(finite);
       return {status:'evaluated',evaluated_observations:eligible.length,
+        first_session:selected[0]?.date,last_session:selected.at(-1)?.date,
         rows:eligible.filter(row=>Number(row.relative_volume20)>=2).reverse().map(row=>({
           symbol,timestamp:row.date,value:row.relative_volume20,volume:row.volume_shares,
           baseline:row.volume_avg20_previous,threshold:Number(row.relative_volume20)>=3?3:2,
