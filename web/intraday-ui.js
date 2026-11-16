@@ -7,7 +7,8 @@
  for(const [v,t] of [['15m','15 phút'],['1h','1 giờ'],['4h','Theo buổi sáng/chiều']]){const o=document.createElement('option');o.value=v;o.textContent=t;select.append(o);}
  const status=document.createElement('p'),plot=document.createElement('div');plot.className='intraday-chart';
  const note=document.createElement('p');note.textContent='Tự kiểm tra local mỗi 5 giây; tải SSI tối đa mỗi 60 giây theo mã. Nến đang hình thành có thể đổi. 4H tách nghỉ trưa nên có thể thiếu kỳ. Giá/KL giữ đơn vị nguồn. Không dùng nến để dựng sổ lệnh.';
- card.append(title,select,status,plot,note);section.insertBefore(card,section.children[1]);
+ const dateNote=document.createElement('p');dateNote.className='helper';dateNote.textContent='Nến nội phiên đọc riêng theo mã và khung nến. Bộ lọc ngày EOD phía trên không giới hạn biểu đồ này.';
+ card.append(title,select,status,dateNote,plot,note);section.insertBefore(card,section.children[1]);
  const warning=document.createElement('article');warning.className='card';const wt=document.createElement('h2');wt.textContent='Độ sâu bên mua · cửa sổ quan sát 60 giây';const ws=document.createElement('p');const wn=document.createElement('p');wn.textContent='Ghi mẫu mỗi giây khi quy ước SSI đã xác minh. Xác nhận sau 60 giây liệu độ sâu thấp kéo dài 15 giây; đây là kết quả đã quan sát, chưa phải dự báo M0/M1/M2. Nến 15m/1h/4h không thay dữ liệu sổ lệnh.';warning.append(wt,ws,wn);alerts.insertBefore(warning,alerts.children[1]);
  let chart=null,busy=false;const vn=d=>d?new Date(d).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}):'chưa có';
  async function update(){
