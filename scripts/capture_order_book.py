@@ -4,13 +4,13 @@ import json
 import os
 import re
 import time
-from datetime import datetime, time as clock_time
-from collections import deque
+from datetime import datetime, time as clock_time, timedelta
+from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from src.ssi_stream import DataStream, VN
-from scripts.market_store import publish
+from scripts.market_store import publish, redis
 from src.ssi_client import SSIReadonly
 
 
@@ -45,10 +45,9 @@ def main():
 
 def capture_session(symbols, day, opens, deadline):
     start = datetime.combine(day, opens, VN)
-    if datetime.now(VN) < start:
-        print(f"Waiting for the session at {start.isoformat()}.", flush=True)
-        while datetime.now(VN) < start:
-            time.sleep(min(30, max(0, (start - datetime.now(VN)).total_seconds())))
+    connect_at = start - timedelta(minutes=3)
+    while datetime.now(VN) < connect_at:
+        time.sleep(min(30, max(0, (connect_at - datetime.now(VN)).total_seconds())))
     if datetime.now(VN) >= deadline:
         raise SystemExit("The selected capture session ended before collection started.")
     now = datetime.now(VN)
@@ -63,12 +62,23 @@ def capture_session(symbols, day, opens, deadline):
     if stream.thread is None:
         raise SystemExit("SSI stream did not start. Check the configured credentials.")
     counts = dict.fromkeys(symbols, 0)
+    observed = Counter()
+    published_books = {}
     publish_live = os.environ.get("SSI_PUBLISH_LIVE") == "true"
+    if publish_live:
+        try:
+            previous = json.loads(redis(["GET", "liquiditylab:live"]) or "{}")
+            published_books = previous.get("last_books", {})
+        except Exception as error:
+            print(f"Previous SSI snapshot not loaded: {type(error).__name__}", flush=True)
+        print("Publishing SSI snapshots throughout the session.", flush=True)
     last_publish = 0.0
     recent = {symbol: deque(maxlen=300) for symbol in symbols}
     publisher = ThreadPoolExecutor(max_workers=1) if publish_live else None
     pending = None
     try:
+        while datetime.now(VN) < start:
+            time.sleep(min(5, max(0, (start - datetime.now(VN)).total_seconds())))
         with path.open("x", encoding="utf-8", buffering=1) as output:
             while datetime.now(VN) < deadline:
                 time.sleep(max(0.01, 1 - time.time() % 1))
@@ -83,6 +93,7 @@ def capture_session(symbols, day, opens, deadline):
                 website_rows = []
                 for symbol, quote in quotes.items():
                     status = "no_quote"
+                    levels = False
                     if quote is not None:
                         event = datetime.fromisoformat(quote["event_time"])
                         received = datetime.fromisoformat(quote["received_at"])
@@ -90,13 +101,21 @@ def capture_session(symbols, day, opens, deadline):
                             status = "disconnected"
                         elif not all(0 <= (sampled - t).total_seconds() <= 5 for t in (event, received)):
                             status = "stale_quote"
-                        elif flag != "LO" or flag_time is None or flag_time.date() != sampled.date() or event < flag_time:
-                            status = "session_unverified"
                         elif not quote["bids"] or not quote["asks"]:
                             status = "incomplete_book"
                         else:
-                            status = "fresh_two_sided_quote"
+                            levels = True
+                            verified = (flag == "LO" and flag_time is not None and
+                                        flag_time.date() == sampled.date() and event >= flag_time)
+                            status = "fresh_two_sided_quote" if verified else "session_unverified"
                             counts[symbol] += 1
+                            if publish_live:
+                                published_books[symbol] = {
+                                    "bids": quote["bids"], "asks": quote["asks"],
+                                    "quote_time": quote["event_time"], "received_at": quote["received_at"],
+                                    "session": flag, "status": status,
+                                }
+                    observed[status] += 1
                     trade = trades[symbol] or {}
                     trade_data = trade.get("data", {})
                     points = recent[symbol]
@@ -109,8 +128,8 @@ def capture_session(symbols, day, opens, deadline):
                         "metrics":stream.book(symbol) if publish_live and status == "fresh_two_sided_quote" else None,
                         "quote_time":quote["event_time"] if quote else None,
                         "trade_time":trade.get("event_time"),
-                        "bids":quote["bids"] if status == "fresh_two_sided_quote" else [],
-                        "asks":quote["asks"] if status == "fresh_two_sided_quote" else [],
+                        "bids":quote["bids"] if levels else [],
+                        "asks":quote["asks"] if levels else [],
                         "last_price":trade_data.get("p"),
                         "last_quantity":trade_data.get("q"),
                         "total_volume":trade_data.get("v"),
@@ -128,6 +147,7 @@ def capture_session(symbols, day, opens, deadline):
                     last_publish = time.monotonic()
                     pending = publisher.submit(publish, "live", {
                         "updated_at":sampled.isoformat(),"rows":website_rows,
+                        "last_books":dict(published_books),
                         "recent_trades":{symbol:list(points) for symbol,points in recent.items()},
                     })
     finally:
@@ -137,7 +157,11 @@ def capture_session(symbols, day, opens, deadline):
     if pending:
         pending.result()
     print("Fresh two-sided quote samples:", counts, "| Raw records dropped:", stream.dropped)
-    if not all(counts.values()) or stream.dropped:
+    print("Sample states:", dict(observed), "| SSI stream:", stream.status(), flush=True)
+    missing = [symbol for symbol, count in counts.items() if not count]
+    if missing or stream.dropped:
+        print("::warning::Incomplete SSI coverage. Missing symbols: " + ",".join(missing), flush=True)
+    if len(missing) == len(symbols):
         raise SystemExit("Incomplete SSI capture. Review the local session files.")
 
 

@@ -10,7 +10,7 @@
  const minute=Number(part('hour'))*60+Number(part('minute'));
  const weekday=['Mon','Tue','Wed','Thu','Fri'].includes(part('weekday'));
  const sessionHours=(minute>=540&&minute<690)||(minute>=780&&minute<900);
- let mode=!window.StaticLiquidity&&weekday&&sessionHours?'DATA':'EOD';
+ let mode=window.StaticLiquidity||weekday&&sessionHours?'DATA':'EOD';
  const modeLabel=document.createElement('label');modeLabel.textContent='Nguồn xem';const modeSelect=document.createElement('select');modeSelect.innerHTML='<option value="DATA">SSI DATA · nhận theo sự kiện</option><option value="EOD">Giá đóng cửa đã lưu · không realtime</option>';modeSelect.value=mode;modeLabel.append(modeSelect);q('#board-search').parentElement.parentElement.prepend(modeLabel);modeSelect.addEventListener('change',()=>{mode=modeSelect.value;load(true);});
  let revision=0,busy=false,timer=null,searchTimer=null,paint=null,stream=null,streamKey='',streamReady=false,lastGlobalScope=window.MarketState.value.scope;
  function scheduleRender(){if(paint==null)paint=requestAnimationFrame(()=>{paint=null;render();});}

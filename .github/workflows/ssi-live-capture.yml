@@ -1,17 +1,25 @@
 name: SSI Live Capture
 on:
   workflow_dispatch:
+    inputs:
+      session:
+        description: SSI trading session (Vietnam time)
+        type: choice
+        options: [morning, afternoon]
+        default: morning
   schedule:
     - cron: '57 1 * * 1-5'
+    - cron: '57 5 * * 1-5'
 permissions:
   contents: read
 concurrency:
-  group: ssi-live-capture
+  group: ssi-live-capture-${{ github.event.schedule == '57 5 * * 1-5' && 'afternoon' || inputs.session || 'morning' }}
   cancel-in-progress: false
 jobs:
   morning:
+    if: ${{ github.event.schedule == '57 1 * * 1-5' || inputs.session == 'morning' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 165
     env:
       SSI_CAPTURE_SESSION: morning
       SSI_PUBLISH_LIVE: ${{ vars.SSI_PUBLISH_LIVE }}
@@ -35,10 +43,9 @@ jobs:
         working-directory: ssi-capture
         run: python -m scripts.capture_order_book
   afternoon:
-    needs: morning
-    if: ${{ !cancelled() }}
+    if: ${{ github.event.schedule == '57 5 * * 1-5' || inputs.session == 'afternoon' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 250
+    timeout-minutes: 125
     env:
       SSI_CAPTURE_SESSION: afternoon
       SSI_PUBLISH_LIVE: ${{ vars.SSI_PUBLISH_LIVE }}

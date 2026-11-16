@@ -288,18 +288,22 @@
       q('#ranking-empty').hidden=true;
       const field=metric==='volume'?'volume_shares':metric;
       const unit=metric==='volume'?'KL nguồn':metric==='return_pct'?'%':'lần';
-      text('#ranking-unit',unit);text('#ranking-scope',`${result.rows.length} mã được tải · phiên cuối từng mã · giảm dần`);
+      text('#ranking-unit',unit);text('#ranking-scope',result.label||`${result.rows.length} mã được tải · phiên cuối từng mã · giảm dần`);
       result.rows.forEach(row => {
         const tr=node('tr'), td=node('td'), button=node('button',row.symbol,'rank-symbol');
         button.type='button'; button.setAttribute('aria-label',`Xem ${row.symbol}`);
-        button.addEventListener('click',() => {q('#symbol-filter').value=row.symbol;state.symbol=row.symbol;loadSeries();});
+        button.addEventListener('click',() => window.MarketState.set({symbol:row.symbol}));
         td.append(button);tr.append(td,node('td',`${fmt(row[field],metric==='volume'?0:2)} ${unit}`));q('#ranking-body').append(tr);
       });
     } catch(error) {
       if(ticket!==rankingRevision) return;
-      q('#ranking-body').replaceChildren();text('#ranking-empty',`Không đọc được xếp hạng local: ${error.message}`);q('#ranking-empty').hidden=false;
+      q('#ranking-body').replaceChildren();text('#ranking-empty',`Chưa có xếp hạng: ${error.message}`);q('#ranking-empty').hidden=false;
     }
   }
+  if(window.StaticLiquidity) setInterval(()=>{
+    if(!document.hidden&&!document.body.classList.contains('guest')&&
+       ['', '#monitor'].includes(location.hash)&&q('#ranking-metric').value==='volume') loadRankings();
+  },5000);
   async function loadSeries() {
     const ticket=++revision;
     setBusy(true);q('#eod-error').hidden=true;

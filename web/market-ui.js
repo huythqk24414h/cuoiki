@@ -39,11 +39,11 @@
     q('#book-evidence').replaceChildren();q('#book-chart')._disposeDepth?.();q('#book-chart').replaceChildren(el('p',message));
     q('#book-status').textContent=message;q('#book-caption').textContent='SSI DATA · Sổ lệnh chưa khả dụng';
   }
-  async function loadBook(){
+  async function loadBook(quiet=false){
     manualMode=false;
     const id=++bookRevision;
     q('#book-refresh').disabled=true;
-    blankBook('Đang kiểm tra trạng thái SSI DATA…');
+    if(quiet!==true)blankBook('Đang kiểm tra trạng thái SSI DATA…');
     try{
       const data=await request('/api/market/book?symbol='+encodeURIComponent(q('#book-symbol').value));
       if(id!==bookRevision)return;
@@ -64,7 +64,7 @@
           }
         }
       }
-    }catch(error){if(id===bookRevision)blankBook('Không đọc được server local: '+error.message);}
+    }catch(error){if(id===bookRevision)blankBook('Không đọc được sổ lệnh SSI: '+error.message);}
     finally{if(id===bookRevision)q('#book-refresh').disabled=false;}
   }
   function drawBook(view,label){
@@ -97,6 +97,39 @@
   q('#book-manual').addEventListener('click',()=>{if(manual)drawBook(manual,'MANUAL');});
   q('#book-symbol').addEventListener('change',loadBook);q('#book-refresh').addEventListener('click',loadBook);
   window.addEventListener('hashchange',()=>{if(location.hash==='#book'){if(manualMode&&manual)drawBook(manual,'MANUAL');else loadBook();}});
+  const overviewBook=q('.book-card');
+  let overviewBusy=false;
+  async function loadOverviewBook(){
+    if(document.hidden||document.body.classList.contains('guest')||overviewBusy||!['','#monitor'].includes(location.hash))return;
+    const symbol=window.MarketState.value.symbol;
+    if(!symbol)return;
+    overviewBusy=true;
+    const caption=overviewBook.querySelector('caption'), helper=overviewBook.querySelector('.helper');
+    try{
+      const data=await request('/api/market/book?symbol='+encodeURIComponent(symbol));
+      if(symbol!==window.MarketState.value.symbol)return;
+      const raw=data.unverified_levels;
+      const bids=data.available?data.bids?.map(r=>[r.price,r.quantity]):raw?.bids;
+      const asks=data.available?data.asks?.map(r=>[r.price,r.quantity]):raw?.asks;
+      const stamp=data.event_time?new Date(data.event_time).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}):'';
+      caption.textContent=[symbol,'SSI DATA',data.available?'Trong phiên':data.status,stamp].filter(Boolean).join(' · ');
+      helper.textContent=data.reason||(raw?'Giá và khối lượng theo đơn vị nguồn SSI.':'Xem thời gian báo giá SSI.');
+      const cells=overviewBook.querySelectorAll('tbody td');
+      for(let i=0;i<3;i++) [bids?.[i]?.[0],bids?.[i]?.[1],asks?.[i]?.[0],asks?.[i]?.[1]]
+        .forEach((value,j)=>{cells[i*4+j].textContent=value??'—';});
+    }catch{
+      caption.textContent=symbol+' · Sổ lệnh SSI tạm thời không đọc được';
+      helper.textContent='Đang chờ kết nối kho dữ liệu.';
+      overviewBook.querySelectorAll('tbody td').forEach(cell=>{cell.textContent='—';});
+    }finally{overviewBusy=false;}
+  }
+  window.addEventListener('market-state-change',loadOverviewBook);
+  window.addEventListener('hashchange',loadOverviewBook);
+  setInterval(()=>{
+    if(document.hidden||document.body.classList.contains('guest'))return;
+    if(location.hash==='#book'&&!manualMode&&!q('#book-refresh').disabled)loadBook(true);
+    else loadOverviewBook();
+  },5000);
   function renderAlerts(){
     const symbol=q('#alert-symbol').value,priority=q('#alert-priority').value,first=q('#alert-from').value,last=q('#alert-to').value;
     const body=q('#alert-rows');body.replaceChildren();
@@ -141,7 +174,8 @@
     badge.lastChild.textContent='SSI DATA · '+(stateLabels[data.status]||data.status);
     badge.dataset.connection=data.status;
     const time=data.last_event_at||data.probe_at;
-    q('#header-source-time').textContent=`EOD ${data.snapshot_asof||'chưa có'} · ${data.last_event_at?'DATA nhận':'Probe'}: ${time?new Date(time).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}):'chưa có'} UTC+7`;
+    const bookTime=data.last_snapshot_at||time;
+    q('#header-source-time').textContent=`EOD ${data.snapshot_asof||'chưa có'} · ${data.last_snapshot_at?'Bản chụp':data.last_event_at?'DATA nhận':'Probe'}: ${bookTime?new Date(bookTime).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}):'chưa có'} UTC+7`;
     const steps=data.historical_probe||[];const auth=steps.find(r=>r.step==='auth');const ws=steps.find(r=>r.step==='DATA_quote_websocket');
     q('#ssi-connection-detail').textContent=`${data.disabled_reason||''} Kết nối: ${stateLabels[data.status]||data.status}. Đã nhận ${data.quote_events||0} quote, lưu ${data.persisted_snapshots||0} snapshot. ${data.measurement_reason||''} ${data.next_retry_at?'Tự thử lại: '+data.next_retry_at:''}${data.safe_error?` Lỗi: ${data.safe_error.error_type}, HTTP ${data.safe_error.http_status??'chưa có'}, mã ${data.safe_error.code||'—'}.`:''}`;
   }).catch(()=>{q('#ssi-connection-detail').textContent='Không đọc được trạng thái local. SSI không được gắn nhãn LIVE.';});}

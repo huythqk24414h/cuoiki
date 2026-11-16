@@ -161,19 +161,26 @@ window.StaticLiquidity = (() => {
     const data=await load('live').catch(()=>null);
     const age=Date.now()-Date.parse(data?.updated_at);
     const active=age>=0&&age<=15000;
-    const directory = await marketDirectory();
+    const directory = await marketDirectory().catch(()=>null);
     const metadata = new Map((directory?.securities||[]).map(row=>[row.symbol,row]));
     const matching=(data?.rows||[]).map(row=>({...metadata.get(row.symbol), ...row}))
-      .filter(row=>boardMatches(row,q,directory?.index_memberships||{}));
+      .filter(row=>boardMatches(row,q,{VN30:data?.rows?.map(row=>row.symbol)||[]}));
     const size=Number(q.get('size'))||30,pages=Math.max(1,Math.ceil(matching.length/size));
     const page=Math.min(pages,Number(q.get('page'))||1);
     const levels=side=>side.map(([price,quantity])=>({price,quantity}));
-    const rows=matching.slice((page-1)*size,page*size).map(row=>({...row,bids:levels(row.bids),asks:levels(row.asks),
-      status:active&&row.status==='fresh_two_sided_quote'?'receiving':'stale',trade_status:'stale',
+    const rows=matching.slice((page-1)*size,page*size).map(row=>({...row,
+      bids:active?levels(row.bids||[]):[],asks:active?levels(row.asks||[]):[],
+      status:active&&row.status==='fresh_two_sided_quote'?'receiving':active&&row.status==='session_unverified'?'Chưa xác minh phiên':'stale',
+      trade_status:freshTime(row.trade_time)?'receiving':'stale',
       received_at:data.updated_at}));
     return {mode:'DATA',rows,page,pages,total:matching.length,catalog_total:data?.rows?.length||0,
       display_note:active?'SSI DATA · Snapshot '+data.updated_at:data?'Snapshot SSI cũ · '+data.updated_at:'Chưa có snapshot SSI trong phiên.',
       units_note:'Giữ đơn vị nguồn SSI.',view_note:'Danh sách mã do collector theo dõi.'};
+  }
+
+  function freshTime(value) {
+    const age=Date.now()-Date.parse(value);
+    return age>=0&&age<=30000;
   }
 
   async function request(target, options) {
@@ -205,20 +212,31 @@ window.StaticLiquidity = (() => {
     const endpoint=path.split('/').at(-1);
     if(endpoint==='book') {
       const symbol=q.get('symbol');
-      if(!(await marketDirectory())?.index_memberships?.VN30?.includes(symbol))
-        return {symbol,available:false,status:'unavailable',reason:'Sổ lệnh chỉ phục vụ VN30.'};
       const snapshot=await load('live');
       const row=snapshot?.rows?.find(row=>row.symbol===symbol);
-      const age=Date.now()-Date.parse(row?.quote_time);
-      if (row?.status==='fresh_two_sided_quote'&&age>=0&&age<=30000) {
-        if(row.metrics) return row.metrics;
-        return {symbol, available:false, status:'unverified',
-          reason:'Đã nhận báo giá SSI. Đang chờ xác minh đơn vị giá và khối lượng.',
-          unverified_levels:{bids:row.bids,asks:row.asks},event_time:row.quote_time,
-          received_at:snapshot.updated_at,session:row.session};
+      const current=freshTime(snapshot?.updated_at)&&freshTime(row?.quote_time)&&row?.bids?.length&&row?.asks?.length;
+      if (current && row.status==='fresh_two_sided_quote' && row.metrics?.available) return row.metrics;
+      const quote=current ? row : snapshot?.last_books?.[symbol];
+      if (quote) {
+        return {symbol, available:false, status:current?'Báo giá trong phiên':'Bản chụp đã lưu',
+          reason:current?'Báo giá gốc SSI. Chỉ báo cần xác minh phiên và đơn vị.':'Bản chụp SSI gần nhất. Xem thời gian nguồn bên dưới.',
+          unverified_levels:{bids:quote.bids,asks:quote.asks},event_time:quote.quote_time,
+          received_at:quote.received_at||snapshot.updated_at,session:quote.session};
       }
       return {symbol, available:false,status:snapshot?'stale':'unavailable',
         reason:snapshot?'Chưa có báo giá SSI mới đủ điều kiện cho mã này.':'Chưa có snapshot sổ lệnh SSI được công bố.'};
+    }
+    if(endpoint==='rankings' && q.get('metric')==='volume' && ['ALL','HOSE','INDEX:VN30'].includes(q.get('scope'))) {
+      const snapshot=await load('live');
+      if (snapshot?.updated_at) {
+        const day=snapshot.updated_at.slice(0,10);
+        const rows=(snapshot.rows||[]).filter(row=>row.trade_time?.startsWith(day) &&
+          row.total_volume!=null && row.total_volume!=='' && Number.isFinite(Number(row.total_volume)) && Number(row.total_volume)>=0)
+          .sort((a,b)=>Number(b.total_volume)-Number(a.total_volume))
+          .map(row=>({symbol:row.symbol,volume_shares:row.total_volume}));
+        if(rows.length>=2) return {available:true,rows,asof:snapshot.updated_at,
+          label:`${freshTime(snapshot.updated_at)?'SSI trong phiên':'Bản chụp trong phiên đã lưu'} · ${rows.length}/${snapshot.rows.length} mã VN30 · ${snapshot.updated_at.slice(0,19).replace('T',' ')} ICT`};
+      }
     }
     if(endpoint==='board'&&q.get('mode')==='DATA') return liveBoard(q);
     if(endpoint==='intraday') {
@@ -234,10 +252,22 @@ window.StaticLiquidity = (() => {
     const closing=published ? Object.entries(published.symbols)
       .filter(([symbol])=>!published.indexes.includes(symbol)).map(([,entry])=>entry.close) : [];
     const latest=published ? closing.map(row=>row.date).sort().at(-1) : null;
+    if(endpoint==='rankings'&&q.get('metric')==='volume'&&published&&['ALL','HOSE','INDEX:VN30'].includes(q.get('scope'))) {
+      const directory=await marketDirectory();
+      const members=new Set(directory?.index_memberships?.VN30||[]);
+      const matching=closing.filter(row=>members.has(row.symbol)&&row.date===latest&&
+        row.volume!=null&&Number.isFinite(Number(row.volume)));
+      const rows=matching.sort((a,b)=>Number(b.volume)-Number(a.volume))
+        .map(row=>({symbol:row.symbol,volume_shares:row.volume}));
+      return {available:rows.length>=2,rows,
+        label:`SSI EOD · ${rows.length}/${members.size} mã VN30 · phiên ${latest}`,
+        message:'Chưa đủ mã VN30 cùng ngày để xếp hạng.'};
+    }
     if (path === '/api/market/status') return {
-      status:'Bản web EOD', snapshot_asof:latest,
-      disabled_reason:'Bản web sử dụng bảng giá đóng cửa do GitHub Actions cập nhật.',
-      measurement_reason:'Dữ liệu sổ lệnh trong phiên xem trên ứng dụng chạy trên máy.'
+      status:'SSI · Trong phiên và cuối ngày', snapshot_asof:latest,
+      disabled_reason:'Ngày EOD là ngày có giá đóng cửa gần nhất.',
+      measurement_reason:'Trang Sổ lệnh hiển thị báo giá SSI và thời gian nguồn.',
+      last_snapshot_at:(await load('live').catch(()=>null))?.updated_at
     };
     if(endpoint==='meta') return {available:false,issues:['Chưa có lịch sử SSI được công bố.']};
     if(endpoint==='coverage'||endpoint==='rankings') throw Error('Chưa có phạm vi thị trường đã xác minh.');

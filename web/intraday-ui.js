@@ -11,6 +11,70 @@
  card.append(title,select,status,dateNote,plot,note);section.insertBefore(card,section.children[1]);
  const warning=document.createElement('article');warning.className='card';const wt=document.createElement('h2');wt.textContent='Độ sâu bên mua · cửa sổ quan sát 60 giây';const ws=document.createElement('p');const wn=document.createElement('p');wn.textContent='Ghi mẫu mỗi giây khi quy ước SSI đã xác minh. Xác nhận sau 60 giây liệu độ sâu thấp kéo dài 15 giây; đây là kết quả đã quan sát, chưa phải dự báo M0/M1/M2. Nến 15m/1h/4h không thay dữ liệu sổ lệnh.';warning.append(wt,ws,wn);alerts.insertBefore(warning,alerts.children[1]);
  let chart=null,busy=false;const vn=d=>d?new Date(d).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}):'chưa có';
+ const dailyPlot=document.querySelector('#price-chart');
+ const dailyCard=dailyPlot.closest('.history-card');
+ const toolbar=document.createElement('label');toolbar.textContent='Khung biểu đồ ';
+ const overviewSelect=document.createElement('select');
+ for(const [value,label] of [['eod','Theo bộ lọc EOD'],['15m','M15'],['1h','H1'],['4h','H4 · theo buổi']]){
+   const option=document.createElement('option');option.value=value;option.textContent=label;overviewSelect.append(option);
+ }
+ toolbar.append(overviewSelect);dailyCard.querySelector('.card-heading').append(toolbar);
+ const overviewPane=document.createElement('div');overviewPane.hidden=true;
+ const overviewStatus=document.createElement('p');overviewStatus.className='helper';overviewStatus.setAttribute('role','status');
+ const overviewPlot=document.createElement('div');overviewPlot.className='intraday-chart';
+ overviewPane.append(overviewStatus,overviewPlot);dailyPlot.after(overviewPane);
+ const overviewNote=document.createElement('p');overviewNote.className='helper';
+ overviewNote.textContent='Giờ Việt Nam. H4 gộp theo buổi để tách nghỉ trưa. Giá và khối lượng theo đơn vị nguồn SSI.';
+ overviewPane.append(overviewNote);
+ const eodParts=[dailyPlot,dailyCard.querySelector('.legend'),dailyCard.querySelector('.chart-foot'),
+   dailyCard.querySelector('#chart-caption'),dailyCard.querySelector(':scope > p.helper'),
+   dailyPlot.previousElementSibling?.matches('p.helper')?dailyPlot.previousElementSibling:null].filter(Boolean);
+ let overviewChart, overviewKey, overviewVersion=0, overviewBusy=false;
+ async function refreshOverview(force=false){
+   if(document.hidden||document.body.classList.contains('guest')||!['','#monitor'].includes(location.hash))return;
+   const resolution=overviewSelect.value;
+   if(resolution==='eod'||overviewBusy&&!force)return;
+   const symbol=window.MarketState.value.symbol||'SSI';
+   const key=symbol+':'+resolution,ticket=++overviewVersion;
+   const changed=key!==overviewKey;overviewKey=key;overviewBusy=true;
+   if(changed){overviewChart?.clear();overviewStatus.textContent=`Đang tải nến ${symbol}…`;}
+   try{
+     const data=await request('/api/market/intraday?'+new URLSearchParams({symbol,resolution}));
+     if(ticket!==overviewVersion||overviewSelect.value!==resolution)return;
+     const rows=data.rows||[];
+     overviewStatus.textContent=`${symbol} · ${rows.length} nến · Mốc nguồn cuối ${vn(data.last_source_time)} · Lần tải ${vn(data.retrieved_at)}`;
+     if(!rows.length){overviewChart?.clear();overviewStatus.textContent+=` · ${data.status||'Chưa có dữ liệu SSI'}`;return;}
+     overviewChart??=echarts.init(overviewPlot);
+     const labels=rows.map(row=>String(row.closed_at||row.timestamp).slice(0,16).replace('T',' '));
+     overviewChart.setOption({
+       animation:false,tooltip:{trigger:'axis'},axisPointer:{link:[{xAxisIndex:'all'}]},
+       grid:[{left:68,right:18,top:18,bottom:'44%'},{left:68,right:18,top:'63%',bottom:58}],
+       xAxis:[{type:'category',data:labels,axisLabel:{show:false}},{type:'category',gridIndex:1,data:labels}],
+       yAxis:[{scale:true,name:'Giá'},{gridIndex:1,name:'Khối lượng'}],
+       dataZoom:[{type:'inside',xAxisIndex:[0,1]},{type:'slider',xAxisIndex:[0,1]}],
+       series:[
+         {type:'candlestick',name:'OHLC',data:rows.map(r=>[r.open,r.close,r.low,r.high].map(Number)),
+           itemStyle:{color:'#08764C',color0:'#BA2540',borderColor:'#08764C',borderColor0:'#BA2540'}},
+         {type:'bar',name:'Khối lượng',xAxisIndex:1,yAxisIndex:1,data:rows.map(r=>Number(r.volume)),itemStyle:{color:'#236ba7'}}
+       ]},changed);
+     overviewChart.resize();
+   }catch(error){
+     if(ticket===overviewVersion){overviewChart?.clear();overviewStatus.textContent='Chưa đọc được nến: '+error.message;}
+   }finally{if(ticket===overviewVersion)overviewBusy=false;}
+ }
+ function switchOverview(){
+   const intraday=overviewSelect.value!=='eod';
+   if(!intraday){overviewVersion++;overviewBusy=false;}
+   overviewPane.hidden=!intraday;
+   eodParts.forEach(part=>part.hidden=intraday);
+   dailyCard.querySelector('h2').textContent=intraday?'Giá & khối lượng · SSI trong phiên':'Giá & khối lượng · SSI EOD';
+   refreshOverview(true);
+ }
+ overviewSelect.addEventListener('change',switchOverview);
+ window.addEventListener('market-state-change',()=>refreshOverview(true));
+ window.addEventListener('hashchange',()=>refreshOverview(true));
+ window.addEventListener('resize',()=>{if(!overviewPane.hidden)overviewChart?.resize();});
+ setInterval(refreshOverview,10000);
  async function update(){
   if(busy||document.hidden||document.body.classList.contains('guest'))return;
   const page=location.hash.slice(1);if(!['analysis','alerts'].includes(page))return;
