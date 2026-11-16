@@ -292,8 +292,9 @@ window.StaticLiquidity = (() => {
       const symbol=q.get('symbol');
       if(!symbol) return {status:'unavailable',rows:[]};
       const date=q.get('date');
-      const to=date||q.get('to')||latest;
-      const params=new URLSearchParams({symbol,range:'CUSTOM',resolution:'1D',period:q.get('period')||'recent',to});
+      const to=date||q.get('to');
+      const params=new URLSearchParams({symbol,range:to?'CUSTOM':'MAX',resolution:'1D',
+        period:q.get('period')||'recent',...(to?{to}:{})});
       const series=await historyResponse('series',params,published);
       const finite=row=>row.relative_volume20!=null&&Number.isFinite(Number(row.relative_volume20));
       if(endpoint==='event-evidence') {
@@ -303,8 +304,7 @@ window.StaticLiquidity = (() => {
           context:series.rows.slice(-30),method:'SSI EOD / TB20 phiên trước',
           paragraphs:['RV20 đo khối lượng tương đối của phiên.']};
       }
-      let selected=series.rows.filter(row=>!q.get('from')||row.date>=q.get('from'));
-      if(!q.get('from')&&!q.get('to')) selected=selected.slice(-22);
+      const selected=series.rows.filter(row=>!q.get('from')||row.date>=q.get('from'));
       const eligible=selected.filter(finite);
       return {status:'evaluated',evaluated_observations:eligible.length,
         first_session:selected[0]?.date,last_session:selected.at(-1)?.date,

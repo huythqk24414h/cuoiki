@@ -168,6 +168,12 @@
     finally{if(id===alertRevision)q('#alert-refresh').disabled=false;}
   }
   ['alert-symbol','alert-priority','alert-from','alert-to'].forEach(id=>q('#'+id).addEventListener('change',()=>{page=1;q('#alert-evidence-panel').hidden=true;if(window.StaticLiquidity&&['alert-from','alert-to'].includes(id))loadAlerts();else renderAlerts();}));
+  q('#alert-show-all').addEventListener('click',()=>{
+    q('#alert-from').value='';
+    q('#alert-to').value='';
+    q('#alert-priority').value='ALL';
+    loadAlerts();
+  });
   q('#alert-prev').addEventListener('click',()=>{page--;renderAlerts();});q('#alert-next').addEventListener('click',()=>{page++;renderAlerts();});q('#alert-refresh').addEventListener('click',loadAlerts);
   window.addEventListener('historical-snapshot-unavailable',()=>{
     ++alertRevision;alerts=[];alertHash=null;alertSummary='Chưa đánh giá: snapshot SSI hiện tại không khả dụng.';
