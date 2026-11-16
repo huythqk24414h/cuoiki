@@ -6,11 +6,12 @@ on:
         description: Maximum new intraday series this run (up to the symbol cap)
         type: number
         default: 8
+      follow_session:
+        description: Refresh every 15 minutes until the market closes
+        type: boolean
+        default: false
   schedule:
-    - cron: '2,17,32,47 2-3 * * 1-5'
-    - cron: '2,17,32 4 * * 1-5'
-    - cron: '2,17,32,47 6 * * 1-5'
-    - cron: '2,17,32 7 * * 1-5'
+    - cron: '32 2 * * 1-5'
 permissions:
   contents: read
 concurrency:
@@ -20,8 +21,9 @@ jobs:
   update:
     if: github.ref == 'refs/heads/main' && vars.SSI_PUBLISH_EOD == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 345
     env:
+      SSI_INTRADAY_FOLLOW_SESSION: ${{ github.event_name == 'schedule' || inputs.follow_session }}
       SSI_INTRADAY_SYMBOLS: ${{ vars.SSI_INTRADAY_SYMBOLS || 'VN30' }}
       SSI_INTRADAY_BACKFILL_BATCH: ${{ inputs.batch_size || vars.SSI_INTRADAY_BACKFILL_BATCH || 8 }}
       SSI_INTRADAY_MAX_SYMBOLS: ${{ vars.SSI_INTRADAY_MAX_SYMBOLS || 32 }}
@@ -35,4 +37,4 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements-ssi.txt
-      - run: python -m scripts.publish_intraday
+      - run: python -m scripts.run_intraday_session
