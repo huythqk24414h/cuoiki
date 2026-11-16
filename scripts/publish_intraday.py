@@ -99,7 +99,7 @@ def update(client, now):
         previous = stored("intraday:"+symbol)
         candles = (previous or {}).get("candles", legacy.get("symbols", {}).get(symbol, {}))
         start = cutoff
-          if entry and (event == "schedule" or os.getenv("SSI_INTRADAY_INCREMENTAL") == "true"):
+        if entry and (event == "schedule" or os.getenv("SSI_INTRADAY_INCREMENTAL") == "true"):
             last = datetime.fromisoformat(entry["last"]).date()
             start = max(cutoff, last.isoformat())
         first = datetime.fromisoformat(start).replace(tzinfo=VN)
