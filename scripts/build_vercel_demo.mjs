@@ -1,6 +1,7 @@
 import { gunzipSync } from 'node:zlib';
 import { existsSync } from 'node:fs';
 import { cp, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 
 const output = new URL('../public-demo/', import.meta.url);
 await mkdir(output, { recursive: true });
@@ -49,3 +50,11 @@ await writeFile(app, source.replace(
   '  const target=new URL(url,location.href);',
   '  const target=new URL(url,location.href);\n  return window.StaticLiquidity.request(target, options);',
 ));
+
+// New deployments must load the matching scripts even on a previously opened site.
+let pageHtml = await readFile(page, 'utf8');
+for (const name of ['static-api.js','app.js','eod-ui.js','market-ui.js','quote-board.js','intraday-ui.js']) {
+  const version = createHash('sha256').update(await readFile(new URL(name, output))).digest('hex').slice(0,12);
+  pageHtml = pageHtml.replace(`src="/${name}"`, `src="/${name}?v=${version}"`);
+}
+await writeFile(page, pageHtml);

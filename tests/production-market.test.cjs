@@ -39,6 +39,17 @@ test('catalog pagination, coverage, missing symbol, and Redis failure', async (t
   assert.equal((await get({kind:'series',symbol:'X1'}))[0],502);
   assert.deepEqual(await get({kind:'intraday',symbol:'X1',resolution:'15m'}),[200,{rows:[]}]);
   assert.equal((await get({kind:'catalog',size:'500'}))[0],400);
+  const morningBook = {quote_time:'2026-11-16T11:29:00+07:00',bids:[[30,100]],asks:[[31,120]]};
+  db['book-morning'] = {last_books:{X1:morningBook}};
+  db.live = {updated_at:new Date().toISOString(),rows:[{symbol:'X1',status:'no_quote'}]};
+  const [, withMorning] = await get({kind:'live',symbol:'X1'});
+  assert.deepEqual(withMorning.last_books.X1,morningBook);
+  assert.equal(withMorning.rows[0].status,'no_quote');
+  const afternoonBook = {...morningBook,quote_time:'2026-11-16T14:29:00+07:00'};
+  db['book-afternoon'] = {last_books:{X1:afternoonBook}};
+  db.live.updated_at = '2026-11-16T14:30:00+07:00';
+  const [, withAfternoon] = await get({kind:'live',symbol:'X1'});
+  assert.deepEqual(withAfternoon.last_books.X1,afternoonBook);
   store.mock.mockImplementation(async()=>({ok:false}));
   assert.equal((await get({kind:'catalog'}))[0],502);
 });

@@ -212,14 +212,14 @@ window.StaticLiquidity = (() => {
     const endpoint=path.split('/').at(-1);
     if(endpoint==='book') {
       const symbol=q.get('symbol');
-      const snapshot=await load('live');
+      const snapshot=await load('live',symbol);
       const row=snapshot?.rows?.find(row=>row.symbol===symbol);
       const current=freshTime(snapshot?.updated_at)&&freshTime(row?.quote_time)&&row?.bids?.length&&row?.asks?.length;
       if (current && row.status==='fresh_two_sided_quote' && row.metrics?.available) return row.metrics;
       const quote=current ? row : snapshot?.last_books?.[symbol];
       if (quote) {
         return {symbol, available:false, status:current?'Báo giá trong phiên':'Bản chụp đã lưu',
-          reason:current?'Báo giá gốc SSI. Chỉ báo cần xác minh phiên và đơn vị.':'Bản chụp SSI gần nhất. Xem thời gian nguồn bên dưới.',
+          reason:current?'Báo giá gốc SSI. Chỉ báo cần xác minh phiên và đơn vị.':`Bản chụp SSI ${quote.capture_session==='morning'?'phiên sáng':quote.capture_session==='afternoon'?'phiên chiều':'gần nhất'}. Xem thời gian nguồn bên dưới.`,
           unverified_levels:{bids:quote.bids,asks:quote.asks},event_time:quote.quote_time,
           received_at:quote.received_at||snapshot.updated_at,session:quote.session};
       }

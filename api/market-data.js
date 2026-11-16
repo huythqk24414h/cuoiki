@@ -8,7 +8,7 @@ module.exports = async function (req, res) {
   const {kind, symbol, resolution, board, q, page, size} = req.query;
   if (!['history','series','live','intraday','catalog','market-delta'].includes(kind))
     return res.status(400).json({error:'Unknown dataset'});
-  if ((kind === 'series' || kind === 'market-delta' || (kind === 'intraday' && symbol !== undefined)) &&
+  if ((kind === 'series' || kind === 'market-delta' || (['intraday','live'].includes(kind) && symbol !== undefined)) &&
       (typeof symbol !== 'string' || !symbolPattern.test(symbol)))
     return res.status(400).json({error:'Invalid symbol'});
   if (kind === 'intraday' && resolution !== undefined &&
@@ -87,6 +87,21 @@ module.exports = async function (req, res) {
           intraday_last:intraday?.symbols?.[row.symbol]?.last ||
             legacy?.symbols?.[row.symbol]?.['15m']?.at(-1)?.closed_at || null,
         })), total:matching.length, ...(paged ? {page:pageNumber,size:pageSize} : {})};
+      }
+    } else if (kind === 'live') {
+      data = await read('live');
+      const snapshotTime = Date.parse(data?.updated_at);
+      if (!data || !Number.isFinite(snapshotTime) || Date.now()-snapshotTime>30000 ||
+          (symbol && !data.last_books?.[symbol])) {
+        const archive = await Promise.allSettled([read('book-morning'),read('book-afternoon')]);
+        const saved = {...data?.last_books};
+        for (const result of archive) {
+          if (result.status !== 'fulfilled') continue;
+          for (const [code,row] of Object.entries(result.value?.last_books||{})) {
+            if (!saved[code] || row.quote_time>saved[code].quote_time) saved[code]=row;
+          }
+        }
+        if (Object.keys(saved).length) data={...data, rows:data?.rows||[], last_books:saved};
       }
     } else data = await read(kind);
     if (!data) return res.status(404).json({error:'No published data yet'});

@@ -40,10 +40,10 @@ def main():
     if now >= deadline:
         print(f"SSI {session}: session has ended; no capture.", flush=True)
         return
-    capture_session(symbols, now.date(), opens, deadline)
+    capture_session(symbols, now.date(), opens, deadline, session)
 
 
-def capture_session(symbols, day, opens, deadline):
+def capture_session(symbols, day, opens, deadline, session):
     start = datetime.combine(day, opens, VN)
     connect_at = start - timedelta(minutes=3)
     while datetime.now(VN) < connect_at:
@@ -64,6 +64,7 @@ def capture_session(symbols, day, opens, deadline):
     counts = dict.fromkeys(symbols, 0)
     observed = Counter()
     published_books = {}
+    session_books = {}
     publish_live = os.environ.get("SSI_PUBLISH_LIVE") == "true"
     if publish_live:
         try:
@@ -110,11 +111,12 @@ def capture_session(symbols, day, opens, deadline):
                             status = "fresh_two_sided_quote" if verified else "session_unverified"
                             counts[symbol] += 1
                             if publish_live:
-                                published_books[symbol] = {
+                                entry = {
                                     "bids": quote["bids"], "asks": quote["asks"],
                                     "quote_time": quote["event_time"], "received_at": quote["received_at"],
-                                    "session": flag, "status": status,
+                                    "session": flag, "status": status, "capture_session": session,
                                 }
+                                published_books[symbol] = session_books[symbol] = entry
                     observed[status] += 1
                     trade = trades[symbol] or {}
                     trade_data = trade.get("data", {})
@@ -154,6 +156,8 @@ def capture_session(symbols, day, opens, deadline):
         stream.stop()
         if publisher:
             publisher.shutdown()
+    if publish_live and session_books:
+        publish("book-" + session, {"date":day.isoformat(), "last_books":session_books})
     if pending:
         pending.result()
     print("Fresh two-sided quote samples:", counts, "| Raw records dropped:", stream.dropped)
