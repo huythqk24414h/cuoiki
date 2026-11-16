@@ -2,6 +2,7 @@
 import os
 import time
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from scripts.market_store import publish
 from scripts.market_universe import BASE_INTRADAY, report_requests, request, select_symbols, stored
@@ -117,7 +118,13 @@ def update(client, now):
         if not previous or candles != merged:
             total_bytes += publish("intraday:"+symbol, {"source":"SSI FastConnect V3 1m OHLCV",
                                 "updated_at":now.isoformat(), "candles":merged})
-        entries[symbol] = {"last":last, "sessions":len({row["timestamp"][:10] for row in merged["15m"]})}
+        latest_session = [row for row in merged["15m"] if row["timestamp"][:10] == last[:10]]
+        entries[symbol] = {
+            "last":last, "sessions":len({row["timestamp"][:10] for row in merged["15m"]}),
+            "session_volume":str(sum(Decimal(row["volume"]) for row in latest_session)),
+            "observed_minutes":sum(row["observed_minutes"] for row in latest_session),
+            "expected_minutes":sum(row["session_minutes"] for row in latest_session),
+        }
         print(f"{symbol}: {entries[symbol]['sessions']} sessions, latest closed {last}", flush=True)
 
     if entries != coverage.get("symbols", {}):

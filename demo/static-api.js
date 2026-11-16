@@ -228,15 +228,24 @@ window.StaticLiquidity = (() => {
     }
     if(endpoint==='rankings' && q.get('metric')==='volume' && ['ALL','HOSE','INDEX:VN30'].includes(q.get('scope'))) {
       const snapshot=await load('live');
-      if (snapshot?.updated_at) {
+      if (freshTime(snapshot?.updated_at)) {
         const day=snapshot.updated_at.slice(0,10);
         const rows=(snapshot.rows||[]).filter(row=>row.trade_time?.startsWith(day) &&
           row.total_volume!=null && row.total_volume!=='' && Number.isFinite(Number(row.total_volume)) && Number(row.total_volume)>=0)
           .sort((a,b)=>Number(b.total_volume)-Number(a.total_volume))
           .map(row=>({symbol:row.symbol,volume_shares:row.total_volume}));
         if(rows.length>=2) return {available:true,rows,asof:snapshot.updated_at,
-          label:`${freshTime(snapshot.updated_at)?'SSI trong phiên':'Bản chụp trong phiên đã lưu'} · ${rows.length}/${snapshot.rows.length} mã VN30 · ${snapshot.updated_at.slice(0,19).replace('T',' ')} ICT`};
+          label:`SSI trong phiên · ${rows.length}/${snapshot.rows.length} mã VN30 · ${snapshot.updated_at.slice(0,19).replace('T',' ')} ICT`};
       }
+      const [intraday,directory]=await Promise.all([load('intraday').catch(()=>null),marketDirectory().catch(()=>null)]);
+      const members=directory?.index_memberships?.VN30||[];
+      const covered=members.map(symbol=>({symbol,...intraday?.coverage?.[symbol]}))
+        .filter(row=>row.last&&row.session_volume!=null && Number.isFinite(Number(row.session_volume)));
+      const last=covered.map(row=>row.last).sort().at(-1);
+      const rows=covered.filter(row=>row.last===last).sort((a,b)=>Number(b.session_volume)-Number(a.session_volume))
+        .map(row=>({symbol:row.symbol,volume_shares:row.session_volume}));
+      if(rows.length>=2) return {available:true,rows,asof:last,
+        label:`SSI OHLCV nội phiên · ${rows.length}/${members.length} mã VN30 cùng mốc ${last.slice(0,16).replace('T',' ')} ICT · KL quan sát trong khớp liên tục`};
     }
     if(endpoint==='board'&&q.get('mode')==='DATA') return liveBoard(q);
     if(endpoint==='intraday') {
