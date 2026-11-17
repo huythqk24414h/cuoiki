@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['.github/workflows/ssi-intraday-index-board.yml', 'src/ssi_client.py', 'src/intraday.py']
+    paths: ['.github/workflows/ssi-intraday-index-board.yml', 'scripts/publish_intraday.py', 'src/ssi_client.py', 'src/intraday.py']
   schedule:
     - cron: '18 2 * * 1-5'
 permissions:

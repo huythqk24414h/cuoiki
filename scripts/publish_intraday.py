@@ -122,16 +122,20 @@ def update_indexes_and_board(client, now):
         try:
             previous = stored("intraday:"+symbol, {})
             candles = previous.get("candles", {})
+            cutoff = (now - timedelta(days=24)).date().isoformat()
+            history_checked = previous.get("history_checked")
             first = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            if not history_checked:
+                first = datetime.fromisoformat(cutoff).replace(tzinfo=VN)
             minutes = fetch_minutes(client, provider, first, now)
             windows = INDEX_WINDOWS.get(symbol, HOSE_WINDOWS)
             recent = {key:closed_candles(minutes, key, now, windows) for key in RESOLUTIONS}
             if recent["15m"]:
-                cutoff = (now - timedelta(days=24)).date().isoformat()
                 merged = merge_candles(candles, recent, cutoff)
-                if candles != merged:
+                if candles != merged or not history_checked:
                     publish("intraday:"+symbol, {"source":"SSI FastConnect V3 1m OHLCV",
-                                                 "updated_at":now.isoformat(), "candles":merged})
+                                                 "updated_at":now.isoformat(), "candles":merged,
+                                                 "history_checked":history_checked or day})
                 print(f"{symbol}: latest closed {merged['15m'][-1]['closed_at']}", flush=True)
             else:
                 print(f"{symbol}: SSI returned no closed 15-minute candles for {day}", flush=True)
