@@ -24,7 +24,7 @@ def update(client, end, directory, already_published, fetch):
     for symbol in pending:
         try:
             old = json.loads(redis(["HGET", KEY, symbol]) or '{"rows":[]}')
-            if old.get("checked_through", "") >= end.isoformat():
+            if old.get("rows") and old["rows"][-1][0] >= end.isoformat():
                 continue
             anchor = archive.get(symbol, {}).get("last")
             start = date.fromisoformat(anchor) + timedelta(days=1) if anchor else START
@@ -32,7 +32,10 @@ def update(client, end, directory, already_published, fetch):
             query_from = max(start, date.fromisoformat(old["checked_through"]) - timedelta(days=7)) if old.get("checked_through") else start
             fresh = fetch(client, symbol, query_from, end, set()) if query_from <= end else {}
             known.update({day:[row[key] for key in FIELDS] for day,row in fresh.items()})
-            payload = json.dumps({"checked_through":end.isoformat(),"rows":[known[day] for day in sorted(known)]},separators=(",",":"))
+            checked_through = max(known, default=anchor or "")
+            if not checked_through:
+                continue
+            payload = json.dumps({"checked_through":checked_through,"rows":[known[day] for day in sorted(known)]},separators=(",",":"))
             if redis(["HSET", KEY, symbol, payload]) not in (0, 1):
                 raise RuntimeError("Redis delta write was not acknowledged")
         except Exception as error:

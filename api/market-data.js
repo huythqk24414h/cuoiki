@@ -97,20 +97,27 @@ module.exports = async function (req, res) {
         last_quote:Object.values(snapshot.last_books || {}).map(row=>row.quote_time).sort().at(-1) || null,
       }] : [])};
     } else if (kind === 'live') {
-      data = await read('live');
+      let liveError;
+      try { data = await read('live'); } catch (error) { liveError=error; }
       const snapshotTime = Date.parse(data?.updated_at);
+      const hasThree = row=>row?.bids?.length>=3 && row?.asks?.length>=3 &&
+        [...row.bids.slice(0,3),...row.asks.slice(0,3)].every(level=>
+          Array.isArray(level) && level.length===2 && level.every(value=>Number.isFinite(Number(value))&&Number(value)>0));
       if (!data || !Number.isFinite(snapshotTime) || Date.now()-snapshotTime>30000 ||
-          (symbol && !data.last_books?.[symbol])) {
+          (symbol && !hasThree(data.last_books?.[symbol])) ||
+          data.rows?.some(row=>!hasThree(row) && !hasThree(data.last_books?.[row.symbol]))) {
         const archive = await Promise.allSettled([read('book-morning'),read('book-afternoon')]);
         const saved = {...data?.last_books};
         for (const result of archive) {
           if (result.status !== 'fulfilled') continue;
           for (const [code,row] of Object.entries(result.value?.last_books||{})) {
-            if (!saved[code] || row.quote_time>saved[code].quote_time) saved[code]=row;
+            if (!saved[code] || (hasThree(row) && !hasThree(saved[code])) ||
+              (hasThree(row)===hasThree(saved[code]) && row.quote_time>saved[code].quote_time)) saved[code]=row;
           }
         }
         if (Object.keys(saved).length) data={...data, rows:data?.rows||[], last_books:saved};
       }
+      if (!data && liveError) throw liveError;
     } else data = await read(kind);
     if (!data) return res.status(404).json({error:'No published data yet'});
     if (['catalog','history','series','intraday','board-summary'].includes(kind))

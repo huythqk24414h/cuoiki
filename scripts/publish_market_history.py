@@ -162,8 +162,17 @@ def update(client, now):
         print(f"{symbol}: {len(rows)} bars, {rows[0]['date']} to {latest['date']}; {size} bytes", flush=True)
     print(f"Daily coverage: {sum(symbol not in INDEX_CODES for symbol in series)} equities; "
           f"pending in configured universe: {sum(symbol not in series for symbol in symbols)}", flush=True)
+    vn30 = directory.get("index_memberships", {}).get("VN30", [])
+    official = series.get("VNINDEX", {}).get("last")
+    if official:
+        missing = [symbol for symbol in vn30 if series.get(symbol, {}).get("last") != official]
+        print(f"SSI EOD {official}: {len(vn30) - len(missing)}/{len(vn30)} VN30 symbols", flush=True)
+        if missing:
+            print("::warning::VN30 EOD missing for " + official + ": " + ",".join(missing), flush=True)
+        if now.weekday() < 5 and now.hour >= 16 and official < end.isoformat():
+            print(f"::warning::SSI VNINDEX has not published EOD for {end}; last available {official}.", flush=True)
     from scripts.update_market_archive import update as update_archive
-    update_archive(client, end, directory, providers, backfill)
+    update_archive(client, min(end, date.fromisoformat(official)) if official else end, directory, providers, backfill)
     if failures:
         raise ValueError("Failed SSI series: " + ",".join(failures))
     if not any(symbol in series for symbol in symbols):

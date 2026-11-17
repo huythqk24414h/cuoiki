@@ -53,8 +53,11 @@ await writeFile(app, source.replace(
 
 // New deployments must load the matching scripts even on a previously opened site.
 let pageHtml = await readFile(page, 'utf8');
-for (const name of ['static-api.js','app.js','eod-ui.js','market-ui.js','quote-board.js','intraday-ui.js']) {
+for (const name of ['static-api.js','app.js','eod-ui.js','market-ui.js','quote-board.js','intraday-ui.js','vn30-brief.js']) {
   const version = createHash('sha256').update(await readFile(new URL(name, output))).digest('hex').slice(0,12);
   pageHtml = pageHtml.replace(`src="/${name}"`, `src="/${name}?v=${version}"`);
 }
+const release = createHash('sha256').update(pageHtml).digest('hex').slice(0,12);
+pageHtml = pageHtml.replace('<head>', '<head><meta name="app-release" content="'+release+'">');
 await writeFile(page, pageHtml);
+await writeFile(new URL('release.json',output), JSON.stringify({release}));

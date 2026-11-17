@@ -41,25 +41,47 @@
   refreshBook();
   setInterval(refreshBook, 15000);
   let data;
-  try {
-    const [catalog,history] = await Promise.all([get('kind=catalog'),get('kind=history')]);
-    const members = [...new Set(catalog.index_memberships?.VN30 || [])];
-    const session = members.map(s=>history.symbols[s]?.last).filter(Boolean).sort().at(-1);
-    if (!session) throw Error('Missing session');
-    const recent = {};
-    let next = 0;
-    await Promise.all(Array.from({length:5},async()=>{
-      while(next<members.length){
-        const symbol=members[next++];
-        try { recent[symbol]=await get('kind=series&tail=21&symbol='+encodeURIComponent(symbol)); }
-        catch { recent[symbol]=[]; }
+  let checkingEod = false;
+  const seriesCache = new Map();
+  async function refreshEod(){
+    if(checkingEod || document.hidden || !['', '#monitor'].includes(location.hash))return;
+    checkingEod = true;
+    try{
+      const history=await get('kind=history');
+      const members=data?.members || [...new Set((await get('kind=catalog&board=VN30&size=30')).index_memberships?.VN30 || [])];
+      const session=members.map(symbol=>history.symbols[symbol]?.last).filter(Boolean).sort().at(-1);
+      if(!session)throw Error('Missing session');
+      const pending=members.filter(symbol=>{
+        const entry=history.symbols[symbol];
+        return entry && seriesCache.get(symbol)?.revision!==(entry.revision || entry.last);
+      });
+      if(data?.session===session && !pending.length){
+        status.textContent='SSI EOD · Phiên '+data.session;
+        return;
       }
-    }));
-    data={members,session,recent};
-    control.disabled=false;
-  } catch {
-    status.textContent='Chưa tải được bản tin SSI. Hãy tải lại trang để thử lại.';
-    return;
+      let next=0;
+      await Promise.all(Array.from({length:Math.min(5,pending.length)},async()=>{
+        while(next<pending.length){
+          const symbol=pending[next++];
+          const entry=history.symbols[symbol];
+          try{
+            const rows=await get('kind=series&tail=21&symbol='+encodeURIComponent(symbol)+
+              '&revision='+encodeURIComponent(entry.revision || entry.last));
+            if(Array.isArray(rows)&&rows.at(-1)?.date===entry.last)
+              seriesCache.set(symbol,{revision:entry.revision || entry.last,rows});
+          }catch {}
+        }
+      }));
+      const upcoming=members.map(symbol=>evaluate(symbol,seriesCache.get(symbol)?.rows || [],session));
+      if(!upcoming.some(row=>row.latest))throw Error('No confirmed EOD rows');
+      data={members,session};
+      records=upcoming;
+      control.disabled=false;
+      renderBrief();
+    }catch{
+      status.textContent=data ? 'SSI EOD · Phiên '+data.session+' · Đang thử lại cập nhật' :
+        'Chưa đọc được bản tin SSI EOD. Trang sẽ tự thử lại.';
+    }finally{checkingEod=false;}
   }
   const root = document.querySelector('#vn30-review');
   const body = root.querySelector('tbody');
@@ -99,7 +121,7 @@
       '#review-symbol': r.symbol + ' · Bằng chứng RV20',
       '#review-reason': r.rv == null ? 'Chưa đủ quan sát hợp lệ để tính RV20.' :
         'RV20 = ' + fmt(+r.latest.volume_shares) + ' / ' + fmt(r.avg,2) + ' = ' + fmt(r.rv,4) + ' lần.',
-      '#review-source': 'Nguồn SSI EOD từ production. Phiên đánh giá ' + (data.session || '—') +
+      '#review-source': 'Nguồn SSI EOD từ production. Phiên đánh giá ' + (r.latest?.date || '—') +
         '. Ngưỡng theo dõi ≥ 2 lần, ưu tiên cao ≥ 3 lần.',
     };
     for (const [selector, value] of Object.entries(fields)) detail.querySelector(selector).textContent = value;
@@ -147,7 +169,7 @@
     return {symbol,latest,prior,avg,rv};
   }
 
-  records = data.members.map(symbol=>evaluate(symbol,data.recent[symbol]||[],data.session));
+  function renderBrief(){
   const eligible = records.filter(r=>r.rv!=null);
   const alerts = eligible.filter(r=>r.rv>=2).sort((a,b)=>b.rv-a.rv||a.symbol.localeCompare(b.symbol));
   root.querySelector('#review-session').textContent = 'SSI EOD · Phiên '+data.session;
@@ -157,4 +179,9 @@
     ? alerts.length+'/'+eligible.length+' mã đạt ngưỡng RV20 ≥ 2'+(alerts.length ? '. Cao nhất: '+alerts.slice(0,3).map(r=>r.symbol+' '+fmt(r.rv,2)+'×').join(', ')+'.' : '.')
     : 'Chưa đủ dữ liệu để đánh giá RV20.';
   draw();
+  }
+  refreshEod();
+  window.addEventListener('hashchange',refreshEod);
+  document.addEventListener('visibilitychange',refreshEod);
+  setInterval(refreshEod,60000);
 })();

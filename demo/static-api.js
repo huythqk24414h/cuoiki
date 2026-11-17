@@ -1,5 +1,24 @@
 'use strict';
 window.StaticLiquidity = (() => {
+  const release = typeof document==='undefined'?null:document.querySelector('meta[name="app-release"]')?.content;
+  let updateNotice;
+  async function checkRelease() {
+    if (!release || document.hidden || updateNotice) return;
+    try {
+      const response=await fetch('/release.json',{cache:'no-store'});
+      if (!response.ok || (await response.json()).release===release) return;
+      if (updateNotice) return;
+      updateNotice=document.createElement('button');
+      updateNotice.className='button secondary';
+      updateNotice.textContent='Đã có bản web mới · Tải lại trang';
+      updateNotice.onclick=()=>location.reload();
+      document.querySelector('main')?.prepend(updateNotice);
+    } catch {}
+  }
+  if(release){
+    document.addEventListener('visibilitychange',checkRelease);
+    setInterval(checkRelease,300000);
+  }
   const unavailable = 'Tính năng này cần dữ liệu SSI trong ứng dụng chạy trên máy.';
   function aggregate(rows, resolution) {
     if (resolution === '1D') return rows;

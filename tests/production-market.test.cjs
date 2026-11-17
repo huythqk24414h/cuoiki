@@ -52,6 +52,14 @@ test('catalog pagination, coverage, missing symbol, and Redis failure', async (t
   db.live.updated_at = '2026-11-16T14:30:00+07:00';
   const [, withAfternoon] = await get({kind:'live',symbol:'X1'});
   assert.deepEqual(withAfternoon.last_books.X1,afternoonBook);
+  store.mock.mockImplementation(async (_,opts)=>{
+    const key=JSON.parse(opts.body)[1];
+    return key==='liquiditylab:live'?{ok:false}:
+      {ok:true,json:async()=>({result:key.endsWith('book-afternoon')?JSON.stringify(db['book-afternoon']):null})};
+  });
+  const [archiveCode, archived] = await get({kind:'live'});
+  assert.equal(archiveCode,200);
+  assert.deepEqual(archived.last_books.X1,afternoonBook);
   store.mock.mockImplementation(async()=>({ok:false}));
   assert.equal((await get({kind:'catalog'}))[0],502);
 });
