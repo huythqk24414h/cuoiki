@@ -1,19 +1,19 @@
 """Incrementally publish closed HOSE candles derived from SSI minute bars."""
 import os
 import time
+import json
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-import json
 from scripts.market_store import publish, redis
 from scripts.market_universe import BASE_INTRADAY, report_requests, request, select_symbols, stored
-from src.intraday import aggregate, normalize
+from src.intraday import aggregate, normalize, HOSE_WINDOWS
 from src.ssi_client import SSIReadonly, safe_error
 from src.ssi_stream import VN
 
-WINDOWS = ((555, 690), (780, 870))
 RESOLUTIONS = {"15m":15, "1h":60, "4h":240}
 ADDITIONAL_INDEXES = {"VN30":"VN30", "HNXINDEX":"HNXINDEX", "UPCOMINDEX":"HNXUPCOMINDEX"}
+INDEX_WINDOWS = {"HNXINDEX":((540,690),(780,870)), "UPCOMINDEX":((540,690),(780,900))}
 SUMMARY_FIELDS = {
     "last_price":"close", "total_volume":"totalMatch", "high":"high", "low":"low",
     "foreign_buy":"totalForeignBuy", "foreign_sell":"totalForeignSell", "foreign_room":"remainForeignRoom",
@@ -21,12 +21,12 @@ SUMMARY_FIELDS = {
 }
 
 
-def closed_candles(rows, resolution, now):
+def closed_candles(rows, resolution, now, windows=HOSE_WINDOWS):
     result = []
-    for row in aggregate(rows, resolution):
+    for row in aggregate(rows, resolution, windows):
         start = datetime.fromisoformat(row["timestamp"])
         minute = start.hour * 60 + start.minute
-        end_minute = next(end for begin, end in WINDOWS if begin <= minute < end)
+        end_minute = next(end for begin, end in windows if begin <= minute < end)
         length = min(RESOLUTIONS[resolution], end_minute - minute)
         end = start + timedelta(minutes=length)
         if end <= now:
@@ -124,7 +124,8 @@ def update_indexes_and_board(client, now):
             candles = previous.get("candles", {})
             first = now.replace(hour=0, minute=0, second=0, microsecond=0)
             minutes = fetch_minutes(client, provider, first, now)
-            recent = {key:closed_candles(minutes, key, now) for key in RESOLUTIONS}
+            windows = INDEX_WINDOWS.get(symbol, HOSE_WINDOWS)
+            recent = {key:closed_candles(minutes, key, now, windows) for key in RESOLUTIONS}
             if recent["15m"]:
                 cutoff = (now - timedelta(days=24)).date().isoformat()
                 merged = merge_candles(candles, recent, cutoff)

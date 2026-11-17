@@ -9,7 +9,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED = {'/api/v3/data/ohlc', '/api/v3/data/securitiesByBoard'}
-ALLOWED.update({'/api/v3/data/indexList', '/api/v3/data/indexSummary'})
+ALLOWED.update({'/api/v3/data/indexList', '/api/v3/data/indexSummary', '/api/v3/data/securitiesSummary'})
 
 
 def credentials():

@@ -3,19 +3,19 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['.github/workflows/ssi-intraday-index-board.yml']
+    paths: ['.github/workflows/ssi-intraday-index-board.yml', 'src/ssi_client.py', 'src/intraday.py']
   schedule:
-    - cron: '32 2 * * 1-5'
+    - cron: '18 2 * * 1-5'
 permissions:
   contents: read
 concurrency:
   group: ssi-intraday-index-board
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 jobs:
   update:
     if: github.ref == 'refs/heads/main' && vars.SSI_PUBLISH_EOD == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 345
+    timeout-minutes: 355
     env:
       SSI_INTRADAY_INDEX_BOARD: 'true'
       SSI_INTRADAY_FOLLOW_SESSION: 'true'

@@ -27,13 +27,16 @@ def normalize(raw,symbol):
         out[key]=row
     return sorted(out.values(),key=lambda r:r['timestamp'])
 
-def aggregate(rows,resolution):
+HOSE_WINDOWS = ((555,690),(780,870))
+
+
+def aggregate(rows,resolution,windows=HOSE_WINDOWS):
     minutes={'15m':15,'1h':60,'4h':240}[resolution];groups={}
     for r in rows:
         dt=datetime.fromisoformat(r['timestamp']);minute=dt.hour*60+dt.minute
         # Independent morning/afternoon buckets: no candle bridges lunch or dates.
-        anchor=555 if minute<690 else 780
-        if dt.weekday()>4 or not (555<=minute<690 or 780<=minute<870):continue
+        anchor=next((begin for begin,end in windows if begin<=minute<end),None)
+        if dt.weekday()>4 or anchor is None:continue
         bucket=anchor+(minute-anchor)//minutes*minutes
         key=dt.replace(hour=bucket//60,minute=bucket%60,second=0,microsecond=0).isoformat()
         groups.setdefault(key,[]).append(r)
