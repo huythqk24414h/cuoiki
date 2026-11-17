@@ -11,6 +11,68 @@
     return res.json();
   };
   const bookStatus = document.querySelector('#review-book');
+  const make=(tag,text)=>{const node=document.createElement(tag);if(text)node.textContent=text;return node;};
+  const digest=make('section');digest.className='card liquidity-panel';
+  const digestSource=make('p','Đang kiểm tra mốc SSI…'), digestEod=make('p','Đang đọc độ phủ EOD…');
+  const digestDepth=make('p','Đang đọc sổ lệnh…');
+  digest.append(make('h2','Bản tin thanh khoản 30 giây'),digestSource,digestEod,digestDepth);
+  const flags=make('section');flags.className='card liquidity-panel';
+  const flagStatus=make('p','Đang kiểm tra các tín hiệu SSI…'),flagList=make('ul');
+  const flagMethod=make('p','Spread mở rộng khi tăng ít nhất 50% và 5 bps so với báo giá hợp lệ trước đó trong lượt xem này. Độ sâu dựa trên cửa sổ 60 giây.');
+  flagMethod.className='helper';
+  flags.append(make('h2','Bảng cờ đỏ thanh khoản'),flagStatus,flagList,flagMethod);
+  status.closest('section').before(digest,flags);
+  const lastSpreads=new Map(),wideSpreads=new Map();
+  let quoteFlags=[],eodFlags=[];
+  const vietnamTime=new Intl.DateTimeFormat('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',dateStyle:'short',timeStyle:'medium'});
+  const stamp=value=>value!=null&&Number.isFinite(new Date(value).getTime())?vietnamTime.format(new Date(value)):'chưa có mốc';
+  function ticker(symbol){
+    if(!window.SymbolDossier)return make('span',symbol);
+    const button=make('button',symbol);button.type='button';button.className='rank-symbol';
+    button.setAttribute('aria-label','Mở hồ sơ '+symbol);
+    button.onclick=()=>window.SymbolDossier.open(symbol);return button;
+  }
+  let flagVersion;
+  function drawFlags(){
+    const entries=[...quoteFlags,...eodFlags];
+    const version=JSON.stringify(entries);
+    if(version===flagVersion)return;
+    flagVersion=version;
+    flagList.replaceChildren(...entries.map(entry=>{
+      const item=make('li');if(entry.symbol)item.append(ticker(entry.symbol),' · ');
+      item.append(entry.text+' · '+entry.source);return item;
+    }));
+    flagStatus.textContent=entries.length?entries.length+' dấu hiệu theo quy tắc đang theo dõi.':
+      'Chưa thấy dấu hiệu đạt ngưỡng trong dữ liệu hiện có.';
+  }
+  function refreshFlags(live,fresh,recent){
+    const now=Date.now();
+    const ict=new Date(now+7*3600000), minute=ict.getUTCHours()*60+ict.getUTCMinutes();
+    const trading=ict.getUTCDay()>0&&ict.getUTCDay()<6&&((minute>=555&&minute<690)||(minute>=780&&minute<870));
+    quoteFlags=[];
+    if(trading&&!recent(live.updated_at)){
+      quoteFlags.push({text:'Gián đoạn dữ liệu sổ lệnh',source:'Mốc bộ thu '+stamp(live.updated_at)});
+    }else if(trading&&fresh.length===0){
+      quoteFlags.push({text:'Chưa có báo giá hai phía đủ mới',source:'Mốc bộ thu '+stamp(live.updated_at)});
+    }
+    for(const row of fresh){
+      const bid=Number(row.bids[0]?.[0]),ask=Number(row.asks[0]?.[0]),time=Date.parse(row.quote_time);
+      if(!(ask>bid&&bid>0))continue;
+      const bps=(ask-bid)/((ask+bid)/2)*10000,previous=lastSpreads.get(row.symbol);
+      if(previous&&time>previous.time&&time-previous.time<=120000&&bps>=previous.bps*1.5&&bps-previous.bps>=5)
+        wideSpreads.set(row.symbol,{bps,before:previous.bps,time});
+      if(!previous||time>previous.time)lastSpreads.set(row.symbol,{bps,time});
+    }
+    for(const [symbol,wide] of wideSpreads){
+      if(now-wide.time>60000){wideSpreads.delete(symbol);continue;}
+      quoteFlags.push({symbol,text:'Spread mở rộng '+fmt(wide.before,2)+' → '+fmt(wide.bps,2)+' bps',source:'SSI '+stamp(wide.time)});
+    }
+    for(const [symbol,depth] of Object.entries(live.depth_windows||{})){
+      if(depth.state==='OBSERVED_LOW_DEPTH'&&recent(depth.updated_at))
+        quoteFlags.push({symbol,text:'Đã quan sát đợt độ sâu mua thấp trong cửa sổ 60 giây',source:'SSI '+stamp(depth.observed_until||depth.updated_at)});
+    }
+    drawFlags();
+  }
   let checkingBook = false;
   async function refreshBook() {
     if (checkingBook || document.hidden || !['', '#monitor'].includes(location.hash)) return;
@@ -31,9 +93,14 @@
           saved ? saved + ' mã có bản chụp sổ lệnh đã lưu' : 'Đang chờ báo giá mua/bán') +
         (trades.length ? ' · ' + trades.length + ' mã có khối lượng khớp lũy kế' : '') +
         '. Xem giờ nguồn trong tab Sổ lệnh.';
+      digestSource.textContent='Mốc bộ thu SSI '+stamp(live.updated_at)+'.';
+      digestDepth.textContent=fresh.length+' mã có báo giá hai phía trong 30 giây · '+saved+' mã có bản chụp lưu.';
+      refreshFlags(live,fresh,isRecent);
     } catch (error) {
       bookStatus.textContent = error.message === '404' ? 'Chưa có sổ lệnh SSI được công bố.' :
         'Chưa kiểm tra được trạng thái sổ lệnh SSI.';
+      digestDepth.textContent=bookStatus.textContent;
+      quoteFlags=[{text:'Không đọc được trạng thái sổ lệnh',source:'Đang thử lại'}];drawFlags();
     } finally {
       checkingBook = false;
     }
@@ -101,7 +168,7 @@
     body.replaceChildren();
     for (const r of sorted.slice(0, root.querySelector('select').value === '5' ? 5 : sorted.length)) {
       const tr = body.insertRow();
-      cell(tr, r.symbol);
+      cell(tr, '').append(ticker(r.symbol));
       cell(tr, r.latest?.date ?? '—');
       cell(tr, fmt(r.latest ? Number(r.latest.volume_shares) : NaN));
       cell(tr, fmt(r.rv, 4));
@@ -172,6 +239,10 @@
   function renderBrief(){
   const eligible = records.filter(r=>r.rv!=null);
   const alerts = eligible.filter(r=>r.rv>=2).sort((a,b)=>b.rv-a.rv||a.symbol.localeCompare(b.symbol));
+  digestEod.textContent=`EOD ${data.session} · ${eligible.length}/${data.members.length} mã tính được RV20 · ${alerts.length} mã đạt ≥2`+
+    (alerts.length?' · Cao nhất '+alerts.slice(0,3).map(r=>r.symbol+' '+fmt(r.rv,2)+'×').join(', '):'')+'.';
+  eodFlags=alerts.filter(r=>r.rv>=3).map(r=>({symbol:r.symbol,text:'RV20 cao '+fmt(r.rv,2)+' lần',source:'SSI EOD '+r.latest.date}));
+  drawFlags();
   root.querySelector('#review-session').textContent = 'SSI EOD · Phiên '+data.session;
   root.querySelector('#review-coverage').textContent = records.filter(r=>r.latest).length+'/'+data.members.length+
     ' mã có dữ liệu phiên này. '+eligible.length+' mã đủ điều kiện tính RV20.';

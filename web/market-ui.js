@@ -174,7 +174,14 @@
     const total=Math.ceil(selected.length/10);page=Math.max(1,Math.min(page,total||1));
     selected.slice((page-1)*10,page*10).forEach(row=>{
       const labels={cao:'Cao',theo_doi:'Theo dõi',duoi_nguong:'Dưới ngưỡng',thieu:'Chưa đủ cơ sở'};
-      const tr=el('tr');[row.symbol,row.timestamp,row.value==null?'—':fmt(row.value)+' lần',
+      const tr=el('tr'),symbolCell=el('td');
+      if(window.SymbolDossier){
+        const symbolButton=el('button',row.symbol);symbolButton.type='button';symbolButton.className='rank-symbol';
+        symbolButton.setAttribute('aria-label','Mở hồ sơ '+row.symbol);
+        symbolButton.onclick=()=>window.SymbolDossier.open(row.symbol);symbolCell.append(symbolButton);
+      }else symbolCell.textContent=row.symbol;
+      tr.append(symbolCell);
+      [row.timestamp,row.value==null?'—':fmt(row.value)+' lần',
         row.threshold==null?'—':'≥'+row.threshold,labels[row.priority]].forEach(v=>tr.append(el('td',v)));
       const td=el('td');
       if(row.value!=null){const button=el('button','Xem bằng chứng');button.className='button secondary';button.type='button';button.addEventListener('click',()=>showEvidence(row,button));td.append(button);}
