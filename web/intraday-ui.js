@@ -62,7 +62,7 @@
      overviewStatus.textContent=last?`${symbol} · ${rows.length} kỳ · ${stamp}`:
        `${symbol} · Chưa có nến cho khung này. Có thể chọn khung nhỏ hơn hoặc lịch sử EOD.`;
      if(!rows.length){ChartKit.destroy(overviewPlot);overviewRevision=undefined;return;}
-     const revision=[key,rows.length,last.date,last.close_vnd,last.volume_shares,last.closed_at,data.retrieved_at].join(':');
+     const revision=[key,rows.length,last.date,last.close_vnd,last.volume_shares,last.closed_at,data.retrieved_at,data.revision].join(':');
      if(revision===overviewRevision)return;
      ChartKit.render(overviewPlot,rows,'close_vnd','Giá và khối lượng','đơn vị nguồn',{main:true,intraday,source:label});
      overviewRevision=revision;

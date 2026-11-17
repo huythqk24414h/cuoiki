@@ -8,6 +8,7 @@
   const fmt=(value,digits=2)=>value==null?'—':calculator.formatDecimal(String(value),digits);
   const el=(tag,value)=>{const n=document.createElement(tag);if(value!=null)n.textContent=value;return n;};
   let manualMode=false;
+  let alertFullHistory=false;
   let renderedBookSymbol;
   let manual=null, alerts=[], page=1, bookRevision=0, alertRevision=0, alertSummary='Chưa đánh giá',alertHash=null;
   const quality=el('details');quality.className='data-quality';const qualityTitle=el('summary','Chất lượng dữ liệu & kết nối');quality.append(qualityTitle);
@@ -23,7 +24,7 @@
   async function showEvidence(row,button){
     const ticket=++evidenceRevision;evidenceTrigger=button;drawer.hidden=false;drawer.focus();explanation.replaceChildren(el('p','Đang kiểm chứng bằng chứng…'));window.ChartKit.destroy(eventChart);q('#alert-evidence').textContent=JSON.stringify(row,null,2);
     try{
-      const sheet=await request('/api/market/event-evidence?'+new URLSearchParams({symbol:row.symbol,date:row.timestamp,...(window.StaticLiquidity?{period:window.MarketState.value.period}:{})}));if(ticket!==evidenceRevision)return;
+      const sheet=await request('/api/market/event-evidence?'+new URLSearchParams({symbol:row.symbol,date:row.timestamp,...(window.StaticLiquidity?{period:alertFullHistory?'vn30':window.MarketState.value.period}:{})}));if(ticket!==evidenceRevision)return;
       const matches=sheet.event_date_exact&&sheet.facts?.symbol===row.symbol&&sheet.facts?.date===row.timestamp&&String(sheet.facts?.rv20)===String(row.value);
       const validContext=Array.isArray(sheet.context)&&sheet.context.length>0&&sheet.context.every(r=>r.symbol===row.symbol&&r.date<=row.timestamp);
       if(!matches||!validContext){explanation.replaceChildren(el('h3','Bằng chứng chưa khớp sự kiện'),el('p','Ngày, mã, RV20 hoặc cửa sổ quan sát không khớp bản cảnh báo đang mở. Hãy đọc lại đánh giá; không diễn giải hoặc vẽ dữ liệu thay thế.'));return;}
@@ -203,7 +204,7 @@
       const symbol=state.symbol||q('#symbol-filter').value;
       const from=q('#alert-from').value,to=q('#alert-to').value;
       if(window.StaticLiquidity){const option=el('option',symbol||'Chưa chọn mã');option.value=symbol;q('#alert-symbol').replaceChildren(option);}
-      const params=window.StaticLiquidity ? {symbol,period:state.period,view:alertView.value,...(from?{from}:{}),...(to?{to}:{})}
+      const params=window.StaticLiquidity ? {symbol,period:alertFullHistory?'vn30':state.period,view:alertView.value,...(from?{from}:{}),...(to?{to}:{})}
         : {symbol,from:from||state.from||window.HistoricalRange?.start||'2026-01-01',to:to||state.to};
       const data=await request('/api/market/alerts?'+new URLSearchParams(params));if(id!==alertRevision)return;
       const nextVersion=[new URLSearchParams(params),data.revision,data.last_session,data.rows?.length].join(':');
@@ -223,6 +224,7 @@
   }
   ['alert-symbol','alert-priority','alert-from','alert-to'].forEach(id=>q('#'+id).addEventListener('change',()=>{page=1;q('#alert-evidence-panel').hidden=true;if(window.StaticLiquidity&&['alert-from','alert-to'].includes(id))loadAlerts();else renderAlerts();}));
   q('#alert-show-all').addEventListener('click',()=>{
+    alertFullHistory=true;
     q('#alert-from').value='';
     q('#alert-to').value='';
     q('#alert-priority').value='ALL';
