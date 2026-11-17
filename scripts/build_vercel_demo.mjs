@@ -41,7 +41,7 @@ const display = (await readFile(eod, 'utf8'))
 await writeFile(eod, display);
 const intra = new URL('intraday-ui.js', output);
 const intraSource = (await readFile(intra, 'utf8'))
-  .replace('Tự kiểm tra local mỗi 5 giây; tải SSI tối đa mỗi 60 giây theo mã. Nến đang hình thành có thể đổi. 4H tách nghỉ trưa nên có thể thiếu kỳ. Giá/KL giữ đơn vị nguồn. Không dùng nến để dựng sổ lệnh.', 'Đọc các nến đã đóng từ OHLCV 1 phút của SSI. HOSE · khớp lệnh liên tục. Khung theo buổi dài tối đa 135 phút sáng hoặc 90 phút chiều. Giá và khối lượng theo đơn vị nguồn SSI.');
+  .replace('Tự kiểm tra local mỗi 5 giây; tải SSI tối đa mỗi 60 giây theo mã. Nến đang hình thành có thể đổi. 4H tách nghỉ trưa nên có thể thiếu kỳ. Giá/KL giữ đơn vị nguồn. Không dùng nến để dựng sổ lệnh.', 'Khớp lệnh liên tục đến 14:30. Mốc ATC 14:45 hiển thị riêng khi SSI có nến tại mốc đó. Giá và khối lượng theo đơn vị nguồn SSI.');
 await writeFile(intra, intraSource);
 
 const app = new URL('app.js', output);

@@ -32,7 +32,17 @@ def closed_candles(rows, resolution, now, windows=HOSE_WINDOWS):
         if end <= now:
             result.append({**row, "closed_at":end.isoformat(), "session_minutes":length,
                            "partial":row["observed_minutes"] < length})
-    return result
+    if windows[-1][1] == 14 * 60 + 30:
+        for row in rows:
+            stamp = datetime.fromisoformat(row["timestamp"])
+            # SSI's closing print belongs to the auction, outside the continuous grid.
+            if stamp.weekday() < 5 and (stamp.hour, stamp.minute) == (14, 45) and stamp < now:
+                start = stamp.replace(minute=30)
+                result.append({**row, "timestamp":start.isoformat(), "closed_at":stamp.isoformat(),
+                               "session":"closing_auction", "session_minutes":1,
+                               "observed_minutes":1, "nominal_minutes":RESOLUTIONS[resolution],
+                               "partial":False})
+    return sorted(result, key=lambda row:row["timestamp"])
 
 
 def fetch_minutes(client, symbol, start, now):

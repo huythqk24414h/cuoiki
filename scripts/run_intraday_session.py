@@ -14,9 +14,9 @@ def session_ticks(day, delay_minutes=0):
     slots = [(9, 32), (9, 47)]
     slots += [(hour, minute) for hour in (10, 13) for minute in (2, 17, 32, 47)]
     slots += [(11, minute) for minute in (2, 17, 32)]
-    slots += [(14, minute) for minute in (2, 17, 32)]
+    slots += [(14, minute) for minute in (2, 17, 32, 47)]
     if delay_minutes:
-        slots.extend([(9, 17), (14, 47), (15, 2)])
+        slots.extend([(9, 17), (15, 2)])
     delay = timedelta(minutes=delay_minutes)
     return sorted(datetime.combine(day, clock(h, m), VN) + delay for h, m in slots)
 

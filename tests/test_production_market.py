@@ -52,6 +52,20 @@ class ProductionMarketTests(unittest.TestCase):
         recent = {"15m":[{**first[0],"observed_minutes":0,"volume":"0"}],"1h":[],"4h":[]}
         self.assertEqual(merge_candles(previous,recent,"2026-11-13")["15m"], first)
 
+    def test_ssi_closing_print_is_separate_from_continuous_candles(self):
+        def row(minute):
+            return dict(timestamp=datetime(2026,11,17,14,minute,tzinfo=VN).isoformat(),
+                        open="10", high="11", low="9", close="10", volume="50")
+        now = datetime(2026,11,17,14,47,tzinfo=VN)
+        for resolution in ("15m", "1h", "4h"):
+            candles = closed_candles([row(29), row(45)], resolution, now)
+            self.assertEqual([bar["closed_at"][11:16] for bar in candles], ["14:30", "14:45"])
+            self.assertEqual(candles[-1]["session"], "closing_auction")
+            self.assertEqual([bar["volume"] for bar in candles], ["50", "50"])
+            self.assertEqual(len(closed_candles([row(29)], resolution, now)), 1)
+            self.assertEqual(len(closed_candles([row(29), row(45)], resolution,
+                                                now.replace(minute=45))), 1)
+
     def test_liquidation_proxy_excludes_current_volume(self):
         rows = [dict(symbol="TEST", date=f"2026-01-{d:02d}", close_vnd="10",
                      volume_shares="100000" if d<21 else "0", price_adjustment="unknown")

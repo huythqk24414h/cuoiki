@@ -65,7 +65,7 @@
   return [...history,{...daily,date:today,provisional:true}];
  }
  function intradayRows(rows,frame,symbol){
-  const source=rows.map(row=>({date:row.timestamp,symbol,closed_at:row.closed_at,
+  const source=rows.map(row=>({date:row.timestamp,symbol,closed_at:row.closed_at,session:row.session,
    open_vnd:row.open,high_vnd:row.high,low_vnd:row.low,close_vnd:row.close,volume_shares:row.volume}));
   const length=frame==='30m'?30:frame==='2h'?120:0;
   if(!length)return source;
@@ -83,7 +83,7 @@
    if(!groups.has(key))groups.set(key,{rows:[],start,end:Math.min(start+length,end)});
    groups.get(key).rows.push({row,minute});
   }
-  const result=[];
+  const result=source.filter(row=>row.session==='closing_auction');
   for(const group of groups.values()){
    const expected=(group.end-group.start)/15;
    if(group.rows.length!==expected||!group.rows.every(({minute},i)=>minute===group.start+i*15))continue;
@@ -91,7 +91,7 @@
    const [bar]=rollup(bars,()=>0);
    result.push({...bar,date:bars[0].date});
   }
-  return result;
+  return result.sort((a,b)=>a.date.localeCompare(b.date));
  }
  function destroy(target){const old=charts.get(target);if(old){old.remove?.();old.dispose?.();charts.delete(target);}target.replaceChildren();}
  const displayNumber=new Intl.NumberFormat('vi-VN',{maximumFractionDigits:4});
@@ -142,6 +142,7 @@
      const row=rows[items[0]?.dataIndex];
      if(!row)return '';
      const lines=[row.symbol+' · '+labels[items[0].dataIndex]];
+     if(row.session==='closing_auction'&&row.date.includes('T'))lines.push('ATC · Mốc đóng cửa SSI');
      if(row.provisional)lines.push('Kỳ đang mở');
      for(const [name,key] of [['Mở cửa','open_vnd'],['Cao nhất','high_vnd'],['Thấp nhất','low_vnd'],['Đóng cửa','close_vnd'],['Khối lượng','volume_shares']])
       lines.push(name+'  '+format(row[key]));
