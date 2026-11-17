@@ -184,3 +184,37 @@ test('analysis preview adds source value and partial metrics without changing of
   delete bars[1].source_value;
   assert.equal((await read('resolution=1D&preview=1')).open_session.source_value_vnd,null);
 });
+
+test('a depth flag remains as a dated prior observation after reload', async () => {
+  class Element {
+    constructor(){this.nodes=new Map();this.children=[];this.textContent='';this.value='';}
+    append(...nodes){this.children.push(...nodes);}
+    before(...nodes){this.beforeNodes=nodes;}
+    replaceChildren(...nodes){this.children=nodes;}
+    addEventListener(){}
+    querySelector(key){if(!this.nodes.has(key))this.nodes.set(key,new Element());return this.nodes.get(key);}
+    closest(){return this.parent;}
+  }
+  const saved=new Map(),start=Date.parse('2026-11-17T14:29:59+07:00');
+  async function launch(state,now){
+    const document=new Element(),root=document.querySelector('#vn30-review');
+    document.createElement=()=>new Element();
+    document.querySelector('#review-session').parent=root;
+    const DateAt=class extends Date {static now(){return now;}};
+    await runInNewContext(readFileSync(require.resolve('../web/vn30-brief.js'),'utf8'),{
+      document,window:{addEventListener(){}},AbortSignal,location:{hash:'#monitor'},setInterval(){},Date:DateAt,
+      localStorage:{getItem:key=>saved.get(key),setItem:(key,value)=>saved.set(key,value)},
+      fetch:async url=>({ok:true,json:async()=>url.includes('kind=live')?
+        {updated_at:new Date(start).toISOString(),depth_windows:{FPT:{state,updated_at:new Date(start).toISOString()}}}:{symbols:{},index_memberships:{VN30:[]}}}),
+    });
+    await new Promise(resolve=>setImmediate(resolve));
+    return root.beforeNodes[1];
+  }
+  const live=await launch('OBSERVED_LOW_DEPTH',start+2000);
+  assert.equal(live.children[3].children.length,1);
+  const reload=await launch('NO_OBSERVED_EVENT',start+120000);
+  assert.equal(reload.children[3].children.length,0);
+  const history=reload.children[4];
+  assert.equal(history.hidden,false);
+  assert.match(history.children[1].children[0].children.join(' '),/Lần ghi nhận trước: SSI .*14:29:59/);
+});

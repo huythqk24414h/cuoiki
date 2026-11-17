@@ -12,7 +12,11 @@
  const warning=document.createElement('article');warning.className='card';const wt=document.createElement('h2');wt.textContent='Độ sâu bên mua · cửa sổ quan sát 60 giây';const ws=document.createElement('p');const wn=document.createElement('p');wn.textContent=window.StaticLiquidity?
   'Lấy mẫu sổ lệnh SSI mỗi giây. So độ sâu ba mức mua với phân vị 10% từ ít nhất 100 mẫu trước đó. Một đợt thấp cần kéo dài ít nhất 15 giây trong cửa sổ 60 giây. Kết quả chỉ dùng để quan sát, theo đơn vị nguồn.':
   'Ghi mẫu mỗi giây khi quy ước SSI đã xác minh. Xác nhận sau 60 giây liệu độ sâu thấp kéo dài 15 giây.';
- warning.append(wt,ws,wn);alerts.insertBefore(warning,alerts.children[1]);
+ const windowEvidence=document.createElement('details');windowEvidence.hidden=true;
+ const evidenceTitle=document.createElement('summary');evidenceTitle.textContent='Xem bằng chứng của cửa sổ 60 giây';
+ const evidenceData=document.createElement('dl');evidenceData.className='source-list';
+ windowEvidence.append(evidenceTitle,evidenceData);
+ warning.append(wt,ws,windowEvidence,wn);alerts.insertBefore(warning,alerts.children[1]);
  let chart=null,busy=false;const vn=d=>d?new Date(d).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}):'chưa có';
  const dailyPlot=document.querySelector('#price-chart');
  const dailyCard=dailyPlot.closest('.history-card');
@@ -114,11 +118,26 @@
       symbol,r.state,`${r.valid_60s}/60 giây gần nhất có mẫu đạt kiểm tra`,
       r.bid_depth!=null?'Độ sâu mua '+Number(r.bid_depth).toLocaleString('vi-VN')+' ('+r.unit+')':null,
       r.threshold!=null?'Ngưỡng '+Number(r.threshold).toLocaleString('vi-VN'):null,
-      r.stale?'Bản đo gần nhất '+vn(r.updated_at):'Cập nhật '+vn(r.updated_at),
+      r.stale?'Đang hiển thị lần đo cuối '+vn(r.updated_at):'Cập nhật '+vn(r.updated_at),
       r.reason||null,
     ].filter(Boolean).join(' · '):
       [r.symbol,r.state,r.samples?`${r.valid_samples}/${r.samples} mẫu hợp lệ`:null,
        r.reason||r.method,r.snapshot_at?'Mốc bộ thu sổ lệnh '+vn(r.snapshot_at):null].filter(Boolean).join(' · ');
+    windowEvidence.hidden=!r.preview;
+    if(r.preview){
+      const fields=[
+        ['Cửa sổ đánh giá',r.anchor_time&&r.observed_until?vn(r.anchor_time)+' → '+vn(r.observed_until):'Chưa đủ điều kiện đánh giá'],
+        ['Mẫu dùng để tính ngưỡng',r.baseline_n!=null?r.baseline_n+' mẫu trước cửa sổ':'Chưa đủ mẫu cơ sở'],
+        ['Mẫu đạt kiểm tra trong 60 giây gần nhất',r.valid_60s+'/60'],
+        ['Kết quả',r.state],
+        ['Lần đo độ sâu cuối',vn(r.updated_at)],
+        ['Mốc bộ thu sổ lệnh',vn(r.snapshot_at)],
+      ];
+      evidenceData.replaceChildren(...fields.map(([key,value])=>{
+        const group=document.createElement('div'),label=document.createElement('dt'),content=document.createElement('dd');
+        label.textContent=key;content.textContent=value;group.append(label,content);return group;
+      }));
+    }
    }
   }catch(e){(page==='analysis'?status:ws).textContent='Chưa đọc được dữ liệu: '+e.message;}finally{busy=false;}
  }

@@ -17,13 +17,22 @@
   const digestDepth=make('p','Đang đọc sổ lệnh…');
   digest.append(make('h2','Bản tin thanh khoản 30 giây'),digestSource,digestEod,digestDepth);
   const flags=make('section');flags.className='card liquidity-panel';
-  const flagStatus=make('p','Đang kiểm tra các tín hiệu SSI…'),flagList=make('ul');
+  const flagStatus=make('p','Đang kiểm tra các tín hiệu SSI…'),flagList=make('ul'),flagTime=make('p');
+  flagTime.className='helper';
+  const previousFlags=make('details'),previousTitle=make('summary','Lần ghi nhận trước'),previousList=make('ul');
+  previousFlags.append(previousTitle,previousList);previousFlags.hidden=true;
   const flagMethod=make('p','Spread mở rộng khi tăng ít nhất 50% và 5 bps so với báo giá hợp lệ trước đó trong lượt xem này. Độ sâu dựa trên cửa sổ 60 giây.');
   flagMethod.className='helper';
-  flags.append(make('h2','Bảng cờ đỏ thanh khoản'),flagStatus,flagList,flagMethod);
+  flags.append(make('h2','Bảng cờ đỏ thanh khoản'),flagStatus,flagTime,flagList,previousFlags,flagMethod);
   status.closest('section').before(digest,flags);
   const lastSpreads=new Map(),wideSpreads=new Map();
-  let quoteFlags=[],eodFlags=[];
+  const flagKey='liquiditylab:last-flags:v1';
+  let remembered={};
+  try {
+    const saved=JSON.parse(localStorage.getItem(flagKey)||'{}');
+    if(saved&&typeof saved==='object'&&!Array.isArray(saved))remembered=saved;
+  } catch {}
+  let quoteFlags=[],eodFlags=[],observedDepthFlags=[];
   const vietnamTime=new Intl.DateTimeFormat('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',dateStyle:'short',timeStyle:'medium'});
   const stamp=value=>value!=null&&Number.isFinite(new Date(value).getTime())?vietnamTime.format(new Date(value)):'chưa có mốc';
   function ticker(symbol){
@@ -33,15 +42,36 @@
     button.onclick=()=>window.SymbolDossier.open(symbol);return button;
   }
   let flagVersion;
+  const eventKey=entry=>entry.kind+':'+(entry.symbol||'VN30');
+  function flagRow(entry,previous=false){
+    const item=make('li');if(entry.symbol)item.append(ticker(entry.symbol),' · ');
+    item.append(entry.text+' · '+(previous?'Lần ghi nhận trước: ':'')+entry.source);return item;
+  }
   function drawFlags(){
     const entries=[...quoteFlags,...eodFlags];
-    const version=JSON.stringify(entries);
+    let dirty=false;
+    for(const entry of [...entries,...observedDepthFlags]){
+      if(!entry.kind||!entry.observedAt)continue;
+      const key=eventKey(entry);
+      if(!remembered[key]||entry.observedAt>remembered[key].observedAt){
+        remembered[key]=entry;dirty=true;
+      }
+    }
+    if(dirty){
+      remembered=Object.fromEntries(Object.entries(remembered).sort((a,b)=>b[1].observedAt-a[1].observedAt).slice(0,120));
+      try{localStorage.setItem(flagKey,JSON.stringify(remembered));}catch {}
+    }
+    const active=new Set(entries.map(eventKey));
+    const old=Object.values(remembered).filter(entry=>entry?.observedAt&&!active.has(eventKey(entry)))
+      .sort((a,b)=>b.observedAt-a.observedAt);
+    const version=JSON.stringify([entries,old]);
     if(version===flagVersion)return;
     flagVersion=version;
-    flagList.replaceChildren(...entries.map(entry=>{
-      const item=make('li');if(entry.symbol)item.append(ticker(entry.symbol),' · ');
-      item.append(entry.text+' · '+entry.source);return item;
-    }));
+    flagList.replaceChildren(...entries.map(entry=>flagRow(entry)));
+    previousList.replaceChildren(...old.map(entry=>flagRow(entry,true)));
+    previousFlags.hidden=!old.length;
+    if(!old.length||!entries.length)previousFlags.open=Boolean(old.length);
+    previousTitle.textContent='Lần ghi nhận trước ('+old.length+')';
     flagStatus.textContent=entries.length?entries.length+' dấu hiệu theo quy tắc đang theo dõi.':
       'Chưa thấy dấu hiệu đạt ngưỡng trong dữ liệu hiện có.';
   }
@@ -51,9 +81,9 @@
     const trading=ict.getUTCDay()>0&&ict.getUTCDay()<6&&((minute>=555&&minute<690)||(minute>=780&&minute<870));
     quoteFlags=[];
     if(trading&&!recent(live.updated_at)){
-      quoteFlags.push({text:'Gián đoạn dữ liệu sổ lệnh',source:'Mốc bộ thu '+stamp(live.updated_at)});
+      quoteFlags.push({kind:'gap',text:'Gián đoạn dữ liệu sổ lệnh',source:'Mốc bộ thu '+stamp(live.updated_at),observedAt:Date.parse(live.updated_at)});
     }else if(trading&&fresh.length===0){
-      quoteFlags.push({text:'Chưa có báo giá hai phía đủ mới',source:'Mốc bộ thu '+stamp(live.updated_at)});
+      quoteFlags.push({kind:'no-quotes',text:'Chưa có báo giá hai phía đủ mới',source:'Mốc bộ thu '+stamp(live.updated_at),observedAt:Date.parse(live.updated_at)});
     }
     for(const row of fresh){
       const bid=Number(row.bids[0]?.[0]),ask=Number(row.asks[0]?.[0]),time=Date.parse(row.quote_time);
@@ -65,12 +95,14 @@
     }
     for(const [symbol,wide] of wideSpreads){
       if(now-wide.time>60000){wideSpreads.delete(symbol);continue;}
-      quoteFlags.push({symbol,text:'Spread mở rộng '+fmt(wide.before,2)+' → '+fmt(wide.bps,2)+' bps',source:'SSI '+stamp(wide.time)});
+      quoteFlags.push({kind:'spread',symbol,text:'Spread mở rộng '+fmt(wide.before,2)+' → '+fmt(wide.bps,2)+' bps',source:'SSI '+stamp(wide.time),observedAt:wide.time});
     }
-    for(const [symbol,depth] of Object.entries(live.depth_windows||{})){
-      if(depth.state==='OBSERVED_LOW_DEPTH'&&recent(depth.updated_at))
-        quoteFlags.push({symbol,text:'Đã quan sát đợt độ sâu mua thấp trong cửa sổ 60 giây',source:'SSI '+stamp(depth.observed_until||depth.updated_at)});
-    }
+    observedDepthFlags=Object.entries(live.depth_windows||{}).filter(([,depth])=>depth.state==='OBSERVED_LOW_DEPTH')
+      .map(([symbol,depth])=>{
+        const time=depth.observed_until||depth.updated_at;
+        return {kind:'depth',symbol,text:'Đã quan sát đợt độ sâu mua thấp trong cửa sổ 60 giây',source:'SSI '+stamp(time),observedAt:Date.parse(time)};
+      });
+    quoteFlags.push(...observedDepthFlags.filter(entry=>now-entry.observedAt>=0&&now-entry.observedAt<=30000));
     drawFlags();
   }
   let checkingBook = false;
@@ -94,6 +126,7 @@
         (trades.length ? ' · ' + trades.length + ' mã có khối lượng khớp lũy kế' : '') +
         '. Xem giờ nguồn trong tab Sổ lệnh.';
       digestSource.textContent='Mốc bộ thu SSI '+stamp(live.updated_at)+'.';
+      flagTime.textContent='Mốc sổ lệnh mới nhất: '+stamp(live.updated_at)+' · EOD '+(data?.session||'đang đọc')+'.';
       digestDepth.textContent=fresh.length+' mã có báo giá hai phía trong 30 giây · '+saved+' mã có bản chụp lưu.';
       refreshFlags(live,fresh,isRecent);
     } catch (error) {
@@ -105,9 +138,10 @@
       checkingBook = false;
     }
   }
+  let data;
+  drawFlags();
   refreshBook();
   setInterval(refreshBook, 15000);
-  let data;
   let checkingEod = false;
   const seriesCache = new Map();
   async function refreshEod(){
@@ -241,7 +275,8 @@
   const alerts = eligible.filter(r=>r.rv>=2).sort((a,b)=>b.rv-a.rv||a.symbol.localeCompare(b.symbol));
   digestEod.textContent=`EOD ${data.session} · ${eligible.length}/${data.members.length} mã tính được RV20 · ${alerts.length} mã đạt ≥2`+
     (alerts.length?' · Cao nhất '+alerts.slice(0,3).map(r=>r.symbol+' '+fmt(r.rv,2)+'×').join(', '):'')+'.';
-  eodFlags=alerts.filter(r=>r.rv>=3).map(r=>({symbol:r.symbol,text:'RV20 cao '+fmt(r.rv,2)+' lần',source:'SSI EOD '+r.latest.date}));
+  eodFlags=alerts.filter(r=>r.rv>=3).map(r=>({kind:'rv20',symbol:r.symbol,text:'RV20 cao '+fmt(r.rv,2)+' lần',
+    source:'SSI EOD '+r.latest.date,observedAt:Date.parse(r.latest.date+'T00:00:00+07:00')}));
   drawFlags();
   root.querySelector('#review-session').textContent = 'SSI EOD · Phiên '+data.session;
   root.querySelector('#review-coverage').textContent = records.filter(r=>r.latest).length+'/'+data.members.length+
