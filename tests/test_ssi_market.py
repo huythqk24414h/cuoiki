@@ -31,7 +31,8 @@ class SSIClientTests(unittest.TestCase):
         self.assertEqual(params['from'],'2026/10/01 00:00:00');self.assertEqual(params['timeFrame'],'1d')
         for symbol in ['../SSI','https://example.com','SSI?x=1']:
             with self.assertRaises(ValueError):client.ohlc(symbol,'bad','bad')
-        self.assertEqual(ALLOWED,{'/api/v3/data/ohlc','/api/v3/data/securitiesByBoard','/api/v3/data/indexList','/api/v3/data/indexSummary'})
+            self.assertEqual(ALLOWED,{'/api/v3/data/ohlc','/api/v3/data/securitiesByBoard','/api/v3/data/indexList',
+                                      '/api/v3/data/indexSummary','/api/v3/data/securitiesSummary'})
         with self.assertRaises(ValueError):SSIReadonly.get(client,'/api/v3/trading/order',{})
 
     def test_error_output_has_no_message_body_or_token(self):
