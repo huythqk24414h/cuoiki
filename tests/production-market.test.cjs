@@ -76,6 +76,10 @@ test('production board keeps the last two-sided quote across missing and older s
   assert.equal(saved.bids[0].price,20);
   assert.equal(saved.status,'Bản chụp đã lưu');
   assert.equal(saved.received_at,time);
+  const detail=await window.StaticLiquidity.request(new URL('https://example.test/api/market/book?symbol=ACB'));
+  assert.equal(detail.snapshot_metrics.bid,5700);
+  assert.equal(detail.snapshot_metrics.ask,13200);
+  assert.equal(detail.available,false);
   snapshot=null;
   await assert.rejects(read,/tạm thời không truy cập/);
 });

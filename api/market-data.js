@@ -115,6 +115,7 @@ module.exports = async function (req, res) {
     if (!data) return res.status(404).json({error:'No published data yet'});
     if (['catalog','history','series','intraday','board-summary'].includes(kind))
       res.setHeader('Cache-Control','public, max-age=0, s-maxage=30');
+    if (kind === 'live') res.setHeader('Cache-Control','public, max-age=0, s-maxage=2');
     return res.status(200).json(data);
   } catch {
     return res.status(502).json({error:'Market data temporarily unavailable'});

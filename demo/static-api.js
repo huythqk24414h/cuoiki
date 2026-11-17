@@ -49,7 +49,7 @@ window.StaticLiquidity = (() => {
   }
   async function load(kind, symbol, resolution) {
     const q = new URLSearchParams({kind,...(symbol ? {symbol} : {}),...(resolution ? {resolution} : {})});
-    const response = await fetch('/api/market-data?'+q,kind==='live'?{cache:'no-store'}:{});
+    const response = await fetch('/api/market-data?'+q);
     if (response.status === 404) return null;
     if (!response.ok) throw Error('Kho dữ liệu SSI tạm thời không truy cập được.');
     return response.json();
@@ -280,9 +280,11 @@ window.StaticLiquidity = (() => {
       if (quote) {
         const now=current && quote.quote_time===row.quote_time;
         const latency=Date.parse(quote.received_at)-Date.parse(quote.quote_time);
+        const metrics=sourceMetrics(quote);
         return {symbol, available:false, status:now?'Báo giá trong phiên':'Bản chụp đã lưu',
-          reason:'Chỉ báo tham khảo tính từ bản chụp SSI. Độ sâu dùng đơn vị giá nguồn × KL nguồn. Kiểm chứng phiên và đơn vị chuẩn vẫn đang chờ.',
-          snapshot_metrics:sourceMetrics(quote),latency_ms:Number.isFinite(latency)&&latency>=0?latency:null,
+          reason:metrics?'Chỉ báo tham khảo từ ba mức SSI. Độ sâu dùng giá nguồn × KL nguồn. Kiểm chứng phiên và đơn vị chuẩn vẫn đang chờ.'
+            :'Bản chụp không đạt kiểm tra thứ tự giá hai phía để tính chỉ báo.',
+          snapshot_metrics:metrics,latency_ms:Number.isFinite(latency)&&latency>=0?latency:null,
           unverified_levels:{bids:quote.bids,asks:quote.asks},event_time:quote.quote_time,
           received_at:quote.received_at||snapshot.updated_at,session:quote.session};
       }

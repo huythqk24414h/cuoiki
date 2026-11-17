@@ -15,7 +15,7 @@
  let revision=0,busy=false,timer=null,searchTimer=null,paint=null,stream=null,streamKey='',streamReady=false,lastGlobalScope=window.MarketState.value.scope;
  function scheduleRender(){if(paint==null)paint=requestAnimationFrame(()=>{paint=null;render();});}
  const rowNodes=new Map(),lastValues=new Map();
- const fmt=v=>v==null||v===''?'—':/^(ATO|ATC)$/.test(String(v))?v:window.LiquidityCalculator.formatDecimal(String(v),4).replace(/([.,]0+)$/,'');
+ const fmt=v=>v==null||v===''?'—':/^(ATO|ATC)$/.test(String(v))?v:window.LiquidityCalculator.formatDecimal(String(v),4);
  const time=v=>v?new Date(v).toLocaleTimeString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',hour12:false}):'—';
  const labels={eod:'EOD đã lưu · không live',receiving:'Đang nhận',stale:'Dữ liệu cũ',waiting:'Chờ dữ liệu',offline:'Mất kết nối',invalid_time:'Sai thời gian'};
  function el(tag,value,className){const n=document.createElement(tag);if(value!=null)n.textContent=value;if(className)n.className=className;return n;}

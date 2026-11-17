@@ -161,6 +161,7 @@ def capture_session(symbols, day, opens, deadline, session):
                         "symbol":symbol, "session":flag, "status":status,
                         "metrics":stream.book(symbol) if publish_live and status == "fresh_two_sided_quote" else None,
                         "quote_time":quote["event_time"] if quote else None,
+                        "received_at":quote["received_at"] if quote else None,
                         "trade_time":trade.get("event_time"),
                         "room_time":room.get("event_time"),
                         "foreign_buy":room_data.get("bq"),"foreign_sell":room_data.get("sq"),
