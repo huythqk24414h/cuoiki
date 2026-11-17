@@ -161,7 +161,7 @@
   const caption=document.createElement('p');caption.className='helper';caption.textContent=`${rows[0].symbol||''} · ${label} (${unit}) · ${options.source||'SSI FastConnect V3'} · ${rows[0].date}–${rows.at(-1).date}`;
   const tools=document.createElement('div');tools.className='chart-tools';
   const reset=document.createElement('button');reset.className='button secondary';reset.type='button';reset.textContent='Đặt lại';tools.append(reset);
-  const plot=document.createElement('div');plot.className=options.main||options.financial?'intraday-chart':'professional-chart';plot.tabIndex=0;plot.setAttribute('role','group');plot.setAttribute('aria-label',caption.textContent+'; Home đặt lại');
+  const plot=document.createElement('div');plot.className=options.main||options.financial?'intraday-chart':'professional-chart';plot.tabIndex=0;plot.setAttribute('role','group');plot.setAttribute('aria-label',caption.textContent+'; phím trái/phải xem từng nến, Home đặt lại');
   target.append(tools,plot,caption);
   const color=css('--color-text')||'#172235',bg=css('--color-surface')||'#fff',bid=css('--color-positive')||'#067858',ask=css('--color-negative')||'#c63150',axis=css('--color-axis')||'#64748b';
   if(options.main||options.financial){
@@ -177,7 +177,16 @@
    drawFinancial(chart,rows,{...options,type:priceType,unit:options.main?'Giá nguồn':unit,zoom});
    reset.onclick=()=>chart.dispatchAction({type:'dataZoom',start:0,end:100});
    choose.onchange=()=>{priceTypes.set(target,choose.value);drawFinancial(chart,rows,{...options,type:choose.value,unit:options.main?'Giá nguồn':unit,zoom:financialZoom(chart)});};
-   plot.addEventListener('keydown',e=>{if(e.key==='Home'){e.preventDefault();reset.click();}});
+   let cursor;
+   plot.addEventListener('keydown',e=>{
+    if(e.key==='Home'){e.preventDefault();reset.click();cursor=undefined;return;}
+    if(!['ArrowLeft','ArrowRight'].includes(e.key))return;
+    e.preventDefault();
+    const zoom=financialZoom(chart),max=rows.length-1;
+    const first=Math.ceil(max*(zoom?.start??0)/100),last=Math.max(first,Math.floor(max*(zoom?.end??100)/100));
+    cursor=Math.max(first,Math.min(last,cursor==null?last:cursor+(e.key==='ArrowLeft'?-1:1)));
+    chart.dispatchAction({type:'showTip',seriesIndex:0,dataIndex:cursor});
+   });
   }else{
    const chart=echarts.init(plot,null,{renderer:'canvas'});charts.set(target,chart);
    const compact=value=>new Intl.NumberFormat('vi-VN',{notation:'compact',maximumFractionDigits:1}).format(value);
