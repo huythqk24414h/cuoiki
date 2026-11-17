@@ -11,7 +11,7 @@ from scripts.publish_intraday import VN
 
 def session_ticks(day):
     # Allow two minutes for the source to publish each closed candle.
-    slots = [(9, 32), (9, 47)]
+    slots = [(9, 17), (9, 32), (9, 47)]
     slots += [(hour, minute) for hour in (10, 13) for minute in (2, 17, 32, 47)]
     slots += [(11, minute) for minute in (2, 17, 32)]
     slots += [(14, minute) for minute in (2, 17, 32)]

@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from src.ssi_stream import DataStream, VN
-from scripts.market_store import publish, redis
+from scripts.market_store import archive_book, publish, redis
 from src.ssi_client import SSIReadonly
 
 
@@ -34,8 +34,9 @@ def main():
     windows = {"morning":(clock_time(9), clock_time(11, 30)),
                "afternoon":(clock_time(13), clock_time(14, 45))}
     opens, closes = windows[session]
-    if session == "morning" and now.time() < clock_time(6):
-        raise SystemExit("Start at or after 06:00 ICT to fit the hosted runner time limit.")
+    earliest = clock_time(6) if session == "morning" else clock_time(11, 30)
+    if now.time() < earliest:
+        raise SystemExit(f"Start {session} at or after {earliest:%H:%M} ICT.")
     deadline = datetime.combine(now.date(), closes, VN)
     if now >= deadline:
         print(f"SSI {session}: session has ended; no capture.", flush=True)
@@ -55,7 +56,7 @@ def capture_session(symbols, day, opens, deadline, session):
 
     folder = Path("data/order_book_capture")
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / (now.strftime("%Y%m%dT%H%M%S") + ".jsonl")
+    path = folder / (now.strftime("%Y%m%dT%H%M%S%f") + ".jsonl")
     stream = DataStream()
     stream.watch_groups["book"] = set(symbols)
     stream.start()
@@ -77,6 +78,23 @@ def capture_session(symbols, day, opens, deadline, session):
     recent = {symbol: deque(maxlen=300) for symbol in symbols}
     publisher = ThreadPoolExecutor(max_workers=1) if publish_live else None
     pending = None
+    checkpoint = None
+    saved_at = float("-inf")
+
+    def save_books(sampled, books):
+        date_key = day.isoformat()
+        snapshot = {"date": date_key, "updated_at": sampled.isoformat(), "last_books": books}
+        key = f"book-archive:{date_key}:{session}:{path.stem}:{sampled:%H%M%S%f}"
+        archive_book(key, snapshot)
+        previous = json.loads(redis(["GET", "liquiditylab:book-" + session]) or "{}")
+        if previous.get("date") == date_key:
+            latest = dict(previous.get("last_books", {}))
+            for symbol, book in books.items():
+                if book["quote_time"] >= latest.get(symbol, {}).get("quote_time", ""):
+                    latest[symbol] = book
+            snapshot["last_books"] = latest
+        publish("book-" + session, snapshot)
+
     try:
         while datetime.now(VN) < start:
             time.sleep(min(5, max(0, (start - datetime.now(VN)).total_seconds())))
@@ -152,14 +170,18 @@ def capture_session(symbols, day, opens, deadline, session):
                         "last_books":dict(published_books),
                         "recent_trades":{symbol:list(points) for symbol,points in recent.items()},
                     })
+                if publisher and session_books and time.monotonic() - saved_at >= 900:
+                    if checkpoint is None or checkpoint.done():
+                        if checkpoint and checkpoint.exception():
+                            print(f"SSI archive failed: {type(checkpoint.exception()).__name__}", flush=True)
+                        saved_at = time.monotonic()
+                        checkpoint = publisher.submit(save_books, sampled, dict(session_books))
     finally:
         stream.stop()
         if publisher:
             publisher.shutdown()
     if publish_live and session_books:
-        archive = {"date":day.isoformat(), "last_books":session_books}
-        publish(f"book-archive:{day.isoformat()}:{session}:{path.stem}", archive, ttl=90*86400)
-        publish("book-" + session, archive)
+        save_books(datetime.now(VN), session_books)
     if pending:
         pending.result()
     print("Fresh two-sided quote samples:", counts, "| Raw records dropped:", stream.dropped)

@@ -163,18 +163,28 @@ window.StaticLiquidity = (() => {
     const active=age>=0&&age<=15000;
     const directory = await marketDirectory().catch(()=>null);
     const metadata = new Map((directory?.securities||[]).map(row=>[row.symbol,row]));
-    const matching=(data?.rows||[]).map(row=>({...metadata.get(row.symbol), ...row}))
-      .filter(row=>boardMatches(row,q,{VN30:data?.rows?.map(row=>row.symbol)||[]}));
+    const liveRows = new Map((data?.rows || []).map(row=>[row.symbol,row]));
+    const members = [...new Set([...liveRows.keys(), ...Object.keys(data?.last_books || {})])].sort();
+    const matching = members.map(symbol=>({...metadata.get(symbol), ...liveRows.get(symbol), symbol}))
+      .filter(row=>boardMatches(row,q,{VN30:members}));
     const size=Number(q.get('size'))||30,pages=Math.max(1,Math.ceil(matching.length/size));
     const page=Math.min(pages,Number(q.get('page'))||1);
     const levels=side=>side.map(([price,quantity])=>({price,quantity}));
-    const rows=matching.slice((page-1)*size,page*size).map(row=>({...row,
-      bids:active?levels(row.bids||[]):[],asks:active?levels(row.asks||[]):[],
-      status:active&&row.status==='fresh_two_sided_quote'?'receiving':active&&row.status==='session_unverified'?'Chưa xác minh phiên':'stale',
-      trade_status:freshTime(row.trade_time)?'receiving':'stale',
-      received_at:data.updated_at}));
-    return {mode:'DATA',rows,page,pages,total:matching.length,catalog_total:data?.rows?.length||0,
-      display_note:active?'SSI DATA · Snapshot '+data.updated_at:data?'Snapshot SSI cũ · '+data.updated_at:'Chưa có snapshot SSI trong phiên.',
+    const rows=matching.slice((page-1)*size,page*size).map(row=>{
+      const current=active && freshTime(row.quote_time) && row.bids?.length && row.asks?.length;
+      const quote=current ? row : data?.last_books?.[row.symbol];
+      const status=current ? (row.status==='fresh_two_sided_quote'?'receiving':'Chưa xác minh phiên')
+        : (quote?'Bản chụp đã lưu':'waiting');
+      return {...row, topic_supported:true, status,
+        session:quote?.session ?? row.session, session_time:quote?.quote_time,
+        bids:levels(quote?.bids || []), asks:levels(quote?.asks || []),
+        trade_status:freshTime(row.trade_time)?'receiving':'stale',
+        received_at:quote?.received_at || quote?.quote_time,
+        reason:quote?.quote_time ? 'Báo giá SSI · '+quote.quote_time : ''};
+    });
+    return {mode:'DATA',rows,page,pages,total:matching.length,catalog_total:members.length,
+      display_note:active?'SSI DATA · '+data.updated_at+' · Xem trạng thái từng mã.'
+        :members.length?'SSI DATA · Bản chụp đã lưu, xem giờ nguồn từng mã.':'Chưa có snapshot SSI trong phiên.',
       units_note:'Giữ đơn vị nguồn SSI.',view_note:'Danh sách mã do collector theo dõi.'};
   }
 

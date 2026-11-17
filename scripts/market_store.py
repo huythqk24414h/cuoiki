@@ -29,3 +29,11 @@ def publish(kind, data, ttl=None):
     if redis(command) != "OK":
         raise RuntimeError("Market store did not acknowledge write")
     return len(command[2].encode("utf-8"))
+
+
+def archive_book(key, snapshot):
+    # A checkpoint is immutable, including when a request is retried.
+    result = redis(["SET", "liquiditylab:" + key,
+                    json.dumps(snapshot, allow_nan=False, separators=(",", ":")), "NX"])
+    if result not in ("OK", None):
+        raise RuntimeError("Market store did not acknowledge checkpoint")

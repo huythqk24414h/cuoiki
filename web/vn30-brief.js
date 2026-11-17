@@ -10,13 +10,42 @@
     if (!res.ok) throw Error(String(res.status));
     return res.json();
   };
+  const bookStatus = document.querySelector('#review-book');
+  let checkingBook = false;
+  async function refreshBook() {
+    if (checkingBook || document.hidden || !['', '#monitor'].includes(location.hash)) return;
+    checkingBook = true;
+    try {
+      const live = await get('kind=live');
+      const isRecent = value => {
+        const age = Date.now() - Date.parse(value);
+        return age >= 0 && age <= 30000;
+      };
+      const fresh = isRecent(live.updated_at) ? (live.rows || []).filter(row =>
+        isRecent(row.quote_time) && row.bids?.length && row.asks?.length) : [];
+      const saved = Object.keys(live.last_books || {}).length;
+      const trades = isRecent(live.updated_at) ? (live.rows || []).filter(row =>
+        row.trade_time?.slice(0, 10) === live.updated_at.slice(0, 10) && row.total_volume != null) : [];
+      bookStatus.textContent = 'SSI trong phiên · ' +
+        (fresh.length ? fresh.length + ' mã có báo giá mua/bán mới' :
+          saved ? saved + ' mã có bản chụp sổ lệnh đã lưu' : 'Đang chờ báo giá mua/bán') +
+        (trades.length ? ' · ' + trades.length + ' mã có khối lượng khớp lũy kế' : '') +
+        '. Xem giờ nguồn trong tab Sổ lệnh.';
+    } catch (error) {
+      bookStatus.textContent = error.message === '404' ? 'Chưa có sổ lệnh SSI được công bố.' :
+        'Chưa kiểm tra được trạng thái sổ lệnh SSI.';
+    } finally {
+      checkingBook = false;
+    }
+  }
+  refreshBook();
+  setInterval(refreshBook, 15000);
   let data;
   try {
     const [catalog,history] = await Promise.all([get('kind=catalog'),get('kind=history')]);
     const members = [...new Set(catalog.index_memberships?.VN30 || [])];
     const session = members.map(s=>history.symbols[s]?.last).filter(Boolean).sort().at(-1);
     if (!session) throw Error('Missing session');
-    const live = get('kind=live').then(x=>Boolean(x.rows?.length),e=>e.message==='404'?false:null);
     const recent = {};
     let next = 0;
     await Promise.all(Array.from({length:5},async()=>{
@@ -26,7 +55,7 @@
         catch { recent[symbol]=[]; }
       }
     }));
-    data={members,session,recent,hasLive:await live};
+    data={members,session,recent};
     control.disabled=false;
   } catch {
     status.textContent='Chưa tải được bản tin SSI. Hãy tải lại trang để thử lại.';
@@ -127,8 +156,5 @@
   root.querySelector('#review-alerts').textContent = eligible.length
     ? alerts.length+'/'+eligible.length+' mã đạt ngưỡng RV20 ≥ 2'+(alerts.length ? '. Cao nhất: '+alerts.slice(0,3).map(r=>r.symbol+' '+fmt(r.rv,2)+'×').join(', ')+'.' : '.')
     : 'Chưa đủ dữ liệu để đánh giá RV20.';
-  root.querySelector('#review-book').textContent = data.hasLive
-    ? 'Có snapshot SSI tại thời điểm tải. Xem thời gian nguồn trong tab Sổ lệnh.'
-    : data.hasLive === null ? 'Chưa kiểm tra được trạng thái sổ lệnh SSI.' : 'Chưa có snapshot bid/ask SSI được công bố. Spread, độ sâu và mất cân bằng chờ dữ liệu.';
   draw();
 })();

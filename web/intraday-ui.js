@@ -62,7 +62,10 @@
        ]},changed);
      overviewChart.resize();
    }catch(error){
-     if(ticket===overviewVersion){overviewChart?.clear();overviewStatus.textContent='Chưa đọc được nến: '+error.message;sessionStamp.textContent=overviewStatus.textContent;}
+     if(ticket===overviewVersion){
+       overviewStatus.textContent='Chưa cập nhật được nến: '+error.message;
+       if(changed)sessionStamp.textContent=overviewStatus.textContent;
+     }
    }finally{if(ticket===overviewVersion)overviewBusy=false;}
  }
  function candleLabel(row){
