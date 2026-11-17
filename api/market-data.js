@@ -6,9 +6,9 @@ module.exports = async function (req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') return res.status(405).json({error:'Method not allowed'});
   const {kind, symbol, resolution, board, q, page, size} = req.query;
-  if (!['history','series','live','intraday','catalog','market-delta','book-checkpoints','board-summary'].includes(kind))
+  if (!['history','series','live','intraday','catalog','market-delta','book-checkpoints','board-summary','depth-window'].includes(kind))
     return res.status(400).json({error:'Unknown dataset'});
-  if ((kind === 'series' || kind === 'market-delta' || (['intraday','live'].includes(kind) && symbol !== undefined)) &&
+  if ((['series','market-delta','depth-window'].includes(kind) || (['intraday','live'].includes(kind) && symbol !== undefined)) &&
       (typeof symbol !== 'string' || !symbolPattern.test(symbol)))
     return res.status(400).json({error:'Invalid symbol'});
   if (kind === 'intraday' && resolution !== undefined &&
@@ -88,6 +88,9 @@ module.exports = async function (req, res) {
             legacy?.symbols?.[row.symbol]?.['15m']?.at(-1)?.closed_at || null,
         })), total:matching.length, ...(paged ? {page:pageNumber,size:pageSize} : {})};
       }
+    } else if (kind === 'depth-window') {
+      const live = await read('live');
+      data = {symbol, ...(live?.depth_windows?.[symbol] || {}), snapshot_at:live?.updated_at};
     } else if (kind === 'book-checkpoints') {
       const sessions = ['morning','afternoon'];
       const books = await Promise.all(sessions.map(session=>read('book-'+session)));
@@ -122,7 +125,7 @@ module.exports = async function (req, res) {
     if (!data) return res.status(404).json({error:'No published data yet'});
     if (['catalog','history','series','intraday','board-summary'].includes(kind))
       res.setHeader('Cache-Control','public, max-age=0, s-maxage=30');
-    if (kind === 'live') res.setHeader('Cache-Control','public, max-age=0, s-maxage=2');
+    if (kind === 'live' || kind === 'depth-window') res.setHeader('Cache-Control','public, max-age=0, s-maxage=2');
     return res.status(200).json(data);
   } catch {
     return res.status(502).json({error:'Market data temporarily unavailable'});

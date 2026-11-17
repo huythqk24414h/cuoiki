@@ -115,4 +115,19 @@ test('chart frames aggregate genuine candles without bridging lunch or filling g
   assert.equal(year[0].close_vnd,'11');
   assert.equal(year[0].open_vnd,null);
   assert.equal(year[0].volume_shares,null);
+  const past=[{date:'2026-11-16',open_vnd:8,high_vnd:12,low_vnd:7,close_vnd:10,volume_shares:400}];
+  const minuteBars=[{...bar('09:15'),closed_at:'2026-11-17T09:30:00+07:00'},
+    {...bar('09:30',12,11),closed_at:'2026-11-17T09:45:00+07:00'}];
+  const provisional=kit.withOpenDay(past,minuteBars,'VNINDEX',null,'2026-11-17');
+  assert.equal(provisional[1].date,'2026-11-17');
+  assert.equal(provisional[1].provisional,true);
+  assert.equal(provisional[1].volume_shares,200);
+  const week=kit.dailyRows(provisional,'1W');
+  assert.equal(week.length,1);
+  assert.equal(week[0].open_vnd,8);
+  assert.equal(week[0].close_vnd,11);
+  assert.equal(week[0].volume_shares,600);
+  assert.equal(week[0].provisional,true);
+  assert.equal(kit.withOpenDay(past,minuteBars,'VNINDEX','2026-11-16','2026-11-17').length,1);
+  assert.equal(kit.withOpenDay(provisional,minuteBars,'VNINDEX',null,'2026-11-17').length,2);
 });

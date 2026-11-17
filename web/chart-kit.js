@@ -51,6 +51,13 @@
    return day.toISOString().slice(0,10);
   });
  }
+ function withOpenDay(history,minutes,symbol,through,today=new Date(Date.now()+7*3600000).toISOString().slice(0,10)){
+  if((through&&through<today)||history.at(-1)?.date>=today)return history;
+  const observed=intradayRows(minutes,'15m',symbol).filter(row=>row.date.startsWith(today)&&row.closed_at?.startsWith(today));
+  if(!observed.length)return history;
+  const [daily]=rollup(observed,()=>today);
+  return [...history,{...daily,date:today,provisional:true}];
+ }
  function intradayRows(rows,frame,symbol){
   const source=rows.map(row=>({date:row.timestamp,symbol,closed_at:row.closed_at,
    open_vnd:row.open,high_vnd:row.high,low_vnd:row.low,close_vnd:row.close,volume_shares:row.volume}));
@@ -158,7 +165,7 @@
    plot.addEventListener('keydown',e=>{if(e.key==='Home')reset.click();});
   }
  }
- window.ChartKit={render,destroy,frameSelect,intradayFrame,intradayRows,dailyRows,historyRange,
+ window.ChartKit={render,destroy,frameSelect,intradayFrame,intradayRows,dailyRows,historyRange,withOpenDay,
   sourceFrame:frame=>frame==='30m'||frame==='2h'?'15m':frame};
  window.addEventListener('resize',()=>charts.forEach(c=>{if(c.getOption)c.resize();}));
  new MutationObserver(()=>window.dispatchEvent(new CustomEvent('chart-theme-change'))).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});

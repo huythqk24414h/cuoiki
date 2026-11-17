@@ -13,6 +13,7 @@ from pathlib import Path
 from src.ssi_stream import DataStream, VN
 from scripts.market_store import archive_book, publish, redis
 from src.ssi_client import SSIReadonly
+from src.depth_watch import source_sample, source_window
 
 
 def full_book(quote):
@@ -87,6 +88,7 @@ def capture_session(symbols, day, opens, deadline, session):
         print("Publishing SSI snapshots throughout the session.", flush=True)
     last_publish = 0.0
     recent = {symbol: deque(maxlen=300) for symbol in symbols}
+    depth_rows = {symbol: deque(maxlen=361) for symbol in symbols}
     publisher = ThreadPoolExecutor(max_workers=1) if publish_live else None
     pending = None
     checkpoint = None
@@ -148,6 +150,10 @@ def capture_session(symbols, day, opens, deadline, session):
                                 }
                                 published_books[symbol] = session_books[symbol] = entry
                     observed[status] += 1
+                    minute = sampled.hour * 60 + sampled.minute
+                    if publish_live and (555 <= minute < 690 or 780 <= minute < 870):
+                        session_id = f"{day}:{session}:{epoch}"
+                        depth_rows[symbol].append(source_sample(symbol, sampled, session_id, quote if levels else None))
                     trade = trades[symbol] or {}
                     trade_data = trade.get("data", {})
                     room = rooms[symbol] or {}
@@ -186,6 +192,7 @@ def capture_session(symbols, day, opens, deadline, session):
                     pending = publisher.submit(publish, "live", {
                         "updated_at":sampled.isoformat(),"rows":website_rows,
                         "last_books":dict(published_books),
+                        "depth_windows":{symbol:source_window(list(rows)) for symbol,rows in depth_rows.items() if rows},
                         "recent_trades":{symbol:list(points) for symbol,points in recent.items()},
                     })
                 if publisher and session_books and time.monotonic() - saved_at >= 900:

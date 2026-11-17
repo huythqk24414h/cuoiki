@@ -19,6 +19,35 @@ def outcome(rows):
     label=label_window(rows,index,threshold)
     return {'state':'CENSORED' if label is None else 'OBSERVED_LOW_DEPTH' if label else 'NO_OBSERVED_EVENT','anchor_time':anchor['timestamp'],'observed_until':rows[-1]['timestamp'],'threshold':str(threshold),'label':label,'forecast':False,'horizon_seconds':60,'minimum_duration_seconds':15,'baseline_n':len(base),'method':'Phân vị quá khứ thực nghiệm 10%; quy tắc mô tả chưa hiệu chỉnh. Không phải xác suất M2.'}
 
+
+def source_sample(symbol, now, session_id, quote):
+    """Descriptive preview from a fresh capture on the one-second grid."""
+    row = {"symbol": symbol, "timestamp": now.replace(microsecond=0).isoformat(),
+           "session_id": session_id, "valid": False}
+    if not quote:
+        return row
+    try:
+        depth = displayed_depth(quote["bids"], quote["asks"], {"price_scale":1,"quantity_scale":1})
+        row.update(bid_depth=depth["bid_depth"], valid=True)
+    except (ArithmeticError, TypeError, ValueError, KeyError):
+        pass
+    return row
+
+
+def source_window(rows):
+    if not rows:
+        return None
+    latest = rows[-1]
+    current = [row for row in rows if row["session_id"] == latest["session_id"]]
+    result = outcome(current)
+    if result["state"] == "CENSORED":
+        result["reason"] = "Thiếu mẫu liên tục hoặc độ sâu đã thấp ở đầu cửa sổ."
+    return {**result, "samples":len(current),
+            "valid_samples":sum(row["valid"] for row in current),
+            "valid_60s":sum(row["valid"] for row in current[-60:]),
+            "updated_at":latest["timestamp"], "bid_depth":latest.get("bid_depth"),
+            "unit":"giá nguồn × KL nguồn", "preview":True}
+
 def sample(symbol,now):
     timestamp=now.replace(microsecond=0).isoformat();session=now.date().isoformat()+('AM' if now.hour<12 else 'PM')
     row={'timestamp':timestamp,'symbol':symbol,'session_id':session,'valid':False}

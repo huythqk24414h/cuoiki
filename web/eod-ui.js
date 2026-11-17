@@ -70,22 +70,27 @@
     }
     indexBusy=true;
     try{
-      const data=await request('/api/market/'+(intraday?'intraday':'index')+'?'+query);
+      const [data,minutes]=await Promise.all([
+        request('/api/market/'+(intraday?'intraday':'index')+'?'+query),
+        !intraday&&window.StaticLiquidity?request('/api/market/intraday?'+new URLSearchParams({symbol:code,resolution:'15m'})):null,
+      ]);
       if(ticket!==indexRequest)return;
-      const rows=intraday?ChartKit.intradayRows(data.rows||[],frame,code):ChartKit.dailyRows(
-        (data.rows||[]).filter(r=>Number(r.indexValue)>0).map(r=>({
+      const history=(intraday?[]:data.rows||[]).filter(r=>Number(r.indexValue)>0).map(r=>({
           date:r.tradingDate.slice(0,10).replaceAll('/','-'),symbol:code,close_vnd:r.indexValue,
           open_vnd:r.open,high_vnd:r.high,low_vnd:r.low,
-        })),frame);
+        }));
+      const rows=intraday?ChartKit.intradayRows(data.rows||[],frame,code):ChartKit.dailyRows(
+        ChartKit.withOpenDay(history,minutes?.rows||[],code,s.range==='CUSTOM'?s.to:null),frame);
       const last=rows.at(-1);
       if(!last){
         ChartKit.destroy(target);indexVersion=undefined;
         text('#index-status',code+' · Chưa có dữ liệu SSI cho khung này.');return;
       }
       const date=intraday?new Date(last.closed_at||last.date).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}):last.date;
-      const source=intraday?'SSI trong phiên':'SSI EOD';
-      text('#index-status',[code,fmt(last.close_vnd)+' điểm',source,date].join(' · '));
-      const version=[key,rows.length,last.date,last.close_vnd,data.retrieved_at,data.revision].join(':');
+      const source=intraday?'SSI trong phiên':last.provisional?'SSI EOD và kỳ đang mở':'SSI EOD';
+      const time=last.provisional?date+' · Đang mở, tạm tính đến '+last.closed_at.slice(11,16)+' ICT':date;
+      text('#index-status',[code,fmt(last.close_vnd)+' điểm',source,time].join(' · '));
+      const version=[key,rows.length,last.date,last.close_vnd,last.closed_at,data.retrieved_at,data.revision].join(':');
       if(indexVersion===version&&!force)return;
       ChartKit.render(target,rows,'close_vnd','Chỉ số','điểm',{financial:true,intraday,source,volumePane:false,defaultType:'line'});
       indexVersion=version;
@@ -94,9 +99,11 @@
     }finally{if(ticket===indexRequest)indexBusy=false;}
   }
   indexMode.addEventListener('change',()=>loadIndex());
-  setInterval(()=>{
+  function refreshIndex(){
     if(window.StaticLiquidity&&!document.hidden&&!document.body.classList.contains('guest')&&['','#monitor'].includes(location.hash))loadIndex(false);
-  },60000);
+  }
+  setInterval(refreshIndex,60000);
+  document.addEventListener('visibilitychange',refreshIndex);
   window.addEventListener('hashchange',syncToolbar);
   window.addEventListener('market-state-change',()=>{
     Object.assign(state,window.MarketState.value);syncToolbar();

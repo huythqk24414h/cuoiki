@@ -167,7 +167,7 @@ window.StaticLiquidity = (() => {
       open:row.open_vnd,high:row.high_vnd,low:row.low_vnd}))};
     const resolution=q.get('resolution')||'1D', summary=rows.at(-1);
     const omitted=data.symbols[symbol]?.quarantined_dates?.length || 0;
-    return {available:true,rows:aggregate(rows,resolution),summary,resolution,
+    return {available:true,rows:aggregate(rows,resolution),summary,resolution,revision:version,
       last_available_session:summary?.date,message:(data.symbols[symbol]||saved||summary)?null:'Mã này chưa có lịch sử SSI được nạp.',unit_status:'Đơn vị nguồn SSI'+(omitted ? ' · '+omitted+' phiên OHLCV bị cách ly' : '')};
   }
   function boardMatches(row, q, members) {
@@ -340,6 +340,15 @@ window.StaticLiquidity = (() => {
       return {rows,last_source_time:rows.at(-1)?.closed_at,retrieved_at:snapshot?.updated_at,
         status:rows.length?'SSI · Nến đã đóng':'Chưa có nến SSI cho mã này'};
     }
+    if(endpoint==='depth-warning') {
+      const symbol=q.get('symbol');
+      const result=await load('depth-window',symbol);
+      const states={WARMUP:'Đang tích lũy mẫu',CENSORED:'Chưa đủ điều kiện kết luận',
+        OBSERVED_LOW_DEPTH:'Đã ghi nhận độ sâu thấp',NO_OBSERVED_EVENT:'Chưa ghi nhận đợt độ sâu thấp'};
+      if(!result?.preview)return {symbol,state:'Chờ bộ thu 1 giây',valid_samples:0,samples:0,
+        reason:'Chưa nhận được chuỗi mẫu 1 giây từ bộ thu của phiên. Bản chụp bảng giá không đủ để suy ra kết quả.'};
+      return {...result,state:states[result.state]||result.state,stale:!freshTime(result.updated_at)};
+    }
     const published=await catalog();
     if(published&&['meta','catalog','series','index','insights'].includes(endpoint))
       return historyResponse(endpoint,q,published);
@@ -366,14 +375,6 @@ window.StaticLiquidity = (() => {
     };
     if(endpoint==='meta') return {available:false,issues:['Chưa có lịch sử SSI được công bố.']};
     if(endpoint==='coverage'||endpoint==='rankings') throw Error('Chưa có phạm vi thị trường đã xác minh.');
-    if (endpoint==='depth-warning') {
-      const symbol=q.get('symbol');
-      const live=await load('live');
-      const row=live?.rows?.find(row=>row.symbol===symbol);
-      return {symbol,state:'Chưa đánh giá',valid_samples:0,samples:0,reason:row
-        ? 'Web có bản chụp sổ lệnh. Phép kiểm tra 60 giây cần chuỗi mẫu liên tục và đơn vị SSI đã xác minh.'
-        : 'Chưa có mẫu sổ lệnh đã công bố cho mã này. Phép kiểm tra 60 giây cần chuỗi mẫu liên tục và đơn vị SSI đã xác minh.'};
-    }
     if(published && ['alerts','event-evidence'].includes(endpoint)) {
       const symbol=q.get('symbol');
       if(!symbol) return {status:'unavailable',rows:[]};
@@ -392,12 +393,16 @@ window.StaticLiquidity = (() => {
       }
       const selected=series.rows.filter(row=>!q.get('from')||row.date>=q.get('from'));
       const eligible=selected.filter(finite);
+      const events=eligible.filter(row=>Number(row.relative_volume20)>=2);
+      const list=q.get('view')==='sessions'?selected:events;
       return {status:'evaluated',evaluated_observations:eligible.length,
+        observations:selected.length,event_count:events.length,revision:series.revision,
         first_session:selected[0]?.date,last_session:selected.at(-1)?.date,
-        rows:eligible.filter(row=>Number(row.relative_volume20)>=2).reverse().map(row=>({
+        rows:[...list].reverse().map(row=>({
           symbol,timestamp:row.date,value:row.relative_volume20,volume:row.volume_shares,
-          baseline:row.volume_avg20_previous,threshold:Number(row.relative_volume20)>=3?3:2,
-          priority:Number(row.relative_volume20)>=3?'cao':'theo_doi'}))};
+          baseline:row.volume_avg20_previous,threshold:finite(row)?Number(row.relative_volume20)>=3?3:2:null,
+          priority:!finite(row)?'thieu':Number(row.relative_volume20)>=3?'cao':
+            Number(row.relative_volume20)>=2?'theo_doi':'duoi_nguong'}))};
     }
     if(endpoint==='alerts') return {status:'unavailable',rows:[]};
     if (path === '/api/market/research') return {status:'Chờ kiểm chứng',h1:'NOT_TESTED',recorded_days:[],counts:{}};

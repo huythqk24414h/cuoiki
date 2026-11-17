@@ -2,7 +2,9 @@
 (function(){
   'use strict';
   const q=selector=>document.querySelector(selector);
-  request('/api/market/research').then(r=>{const n=q('#research-readiness');if(n)n.textContent=`${r.status} · H1: ${r.h1} · ${r.recorded_days.length} ngày raw, ${r.counts.quote||0} quote / ${r.counts.trade||0} trade. Chưa đủ dữ liệu và hợp đồng đơn vị để đánh giá M0/M1/M2.`;}).catch(()=>{});
+  request('/api/market/research').then(r=>{const n=q('#research-readiness');if(n)n.textContent=window.StaticLiquidity?
+    'H1 chưa kiểm định. Cửa sổ 60 giây ở trên dùng để quan sát; quy trình kiểm định mô hình cần bộ dữ liệu gốc và đơn vị đã xác minh.' :
+    `${r.status} · H1: ${r.h1} · ${r.recorded_days.length} ngày raw, ${r.counts.quote||0} quote / ${r.counts.trade||0} trade.`;}).catch(()=>{});
   const fmt=(value,digits=2)=>value==null?'—':calculator.formatDecimal(String(value),digits);
   const el=(tag,value)=>{const n=document.createElement(tag);if(value!=null)n.textContent=value;return n;};
   let manualMode=false;
@@ -26,8 +28,9 @@
       const validContext=Array.isArray(sheet.context)&&sheet.context.length>0&&sheet.context.every(r=>r.symbol===row.symbol&&r.date<=row.timestamp);
       if(!matches||!validContext){explanation.replaceChildren(el('h3','Bằng chứng chưa khớp sự kiện'),el('p','Ngày, mã, RV20 hoặc cửa sổ quan sát không khớp bản cảnh báo đang mở. Hãy đọc lại đánh giá; không diễn giải hoặc vẽ dữ liệu thay thế.'));return;}
       explanation.replaceChildren(el('h3',`${row.symbol} · ${row.timestamp} · RV20 ${fmt(row.value)} lần`));
-      explanation.append(el('p',`Cảnh báo xuất hiện vì khối lượng ${fmt(row.volume,0)} / trung bình 20 quan sát trước ${fmt(row.baseline,2)} = ${fmt(row.value,4)} ≥ ${row.threshold}. Ưu tiên ${row.priority==='cao'?'cao (≥3 lần)':'theo dõi (≥2 lần)'}.`));
-      explanation.append(el('p',`Đối chiếu máy tính: khớp mã, ngày và RV20. Nguồn quan sát: SSI EOD; đây là cảnh báo do Liquidity Lab tính, không phải cảnh báo phát hành bởi SSI. Cửa sổ hình gồm tối đa 30 quan sát kết thúc tại sự kiện, không có dữ liệu tương lai.`));
+      const crossed=Number(row.value)>=Number(row.threshold);
+      explanation.append(el('p',`Khối lượng ${fmt(row.volume,0)} / trung bình 20 phiên trước ${fmt(row.baseline,2)} = ${fmt(row.value,4)} ${crossed?'≥':'<'} ${row.threshold}. ${crossed?(row.priority==='cao'?'Ưu tiên cao.':'Theo dõi.'):'Dưới ngưỡng cảnh báo.'}`));
+      explanation.append(el('p','Nguồn SSI EOD. Biểu đồ bằng chứng hiển thị tối đa 30 phiên đến ngày được chọn.'));
       q('#alert-evidence').textContent=JSON.stringify({event:row,facts:sheet.facts,method:sheet.method,verification:{date_symbol_ratio_match:true,no_future_context:true}},null,2);
       sheet.paragraphs.forEach(p=>explanation.append(el('p',p)));
       window.ChartKit.render(eventChart,sheet.context,'volume_shares','Khối lượng đến ngày sự kiện','đơn vị KL nguồn',{bars:true});
@@ -169,33 +172,53 @@
     const selected=alerts.filter(r=>(symbol==='ALL'||r.symbol===symbol)&&(priority==='ALL'||r.priority===priority)&&(!first||r.timestamp>=first)&&(!last||r.timestamp<=last));
     const total=Math.ceil(selected.length/10);page=Math.max(1,Math.min(page,total||1));
     selected.slice((page-1)*10,page*10).forEach(row=>{
-      const tr=el('tr');[row.symbol,row.timestamp,fmt(row.value)+' lần','≥'+row.threshold,row.priority==='cao'?'Cao':'Theo dõi'].forEach(v=>tr.append(el('td',v)));
-      const td=el('td'),button=el('button','Xem bằng chứng');button.className='button secondary';button.type='button';button.addEventListener('click',()=>showEvidence(row,button));td.append(button);tr.append(td);body.append(tr);
+      const labels={cao:'Cao',theo_doi:'Theo dõi',duoi_nguong:'Dưới ngưỡng',thieu:'Chưa đủ cơ sở'};
+      const tr=el('tr');[row.symbol,row.timestamp,row.value==null?'—':fmt(row.value)+' lần',
+        row.threshold==null?'—':'≥'+row.threshold,labels[row.priority]].forEach(v=>tr.append(el('td',v)));
+      const td=el('td');
+      if(row.value!=null){const button=el('button','Xem bằng chứng');button.className='button secondary';button.type='button';button.addEventListener('click',()=>showEvidence(row,button));td.append(button);}
+      else td.textContent='—';
+      tr.append(td);body.append(tr);
     });
     if(!selected.length){const td=el('td','Không có sự kiện khớp bộ lọc; không có nghĩa thị trường an toàn.');td.colSpan=6;const tr=el('tr');tr.append(td);body.append(tr);}
-    q('#alert-page').textContent=`${selected.length} sự kiện · trang ${total?page:0}/${total}`;
+    q('#alert-page').textContent=`${selected.length} ${alertView?.value==='sessions'?'phiên':'sự kiện'} · trang ${total?page:0}/${total}`;
     q('#alert-prev').disabled=page<=1;q('#alert-next').disabled=page>=total;
   }
-  async function loadAlerts(){
-    q('#alert-evidence-panel').hidden=true;
-    const id=++alertRevision;q('#alert-refresh').disabled=true;q('#alert-status').textContent='Đang đọc cảnh báo EOD…';
+  let alertView, alertVersion;
+  if(window.StaticLiquidity){
+    const label=el('label','Hiển thị');
+    alertView=el('select');
+    for(const [value,text] of [['events','Chỉ cảnh báo ≥2'],['sessions','Tất cả phiên EOD']]){
+      const option=el('option',text);option.value=value;alertView.append(option);
+    }
+    label.append(alertView);q('#alert-priority').closest('label').after(label);
+    alertView.addEventListener('change',()=>{q('#alert-priority').value='ALL';loadAlerts();});
+  }
+  async function loadAlerts(quiet=false){
+    if(quiet===true&&q('#alert-refresh').disabled)return;
+    if(quiet!==true){q('#alert-evidence-panel').hidden=true;q('#alert-status').textContent='Đang đọc cảnh báo EOD…';}
+    const id=++alertRevision;q('#alert-refresh').disabled=true;
     try{
       const state=window.MarketState.value;
       const symbol=state.symbol||q('#symbol-filter').value;
       const from=q('#alert-from').value,to=q('#alert-to').value;
       if(window.StaticLiquidity){const option=el('option',symbol||'Chưa chọn mã');option.value=symbol;q('#alert-symbol').replaceChildren(option);}
-      const params=window.StaticLiquidity ? {symbol,period:state.period,...(from?{from}:{}),...(to?{to}:{})}
+      const params=window.StaticLiquidity ? {symbol,period:state.period,view:alertView.value,...(from?{from}:{}),...(to?{to}:{})}
         : {symbol,from:from||state.from||window.HistoricalRange?.start||'2026-01-01',to:to||state.to};
       const data=await request('/api/market/alerts?'+new URLSearchParams(params));if(id!==alertRevision)return;
-      alerts=data.rows||[];page=1;
+      const nextVersion=[new URLSearchParams(params),data.revision,data.last_session,data.rows?.length].join(':');
+      if(quiet===true&&alertVersion===nextVersion){q('#alert-status').textContent=alertSummary;return;}
+      alertVersion=nextVersion;
+      alerts=data.rows||[];if(quiet!==true)page=1;
       alertHash=data.snapshot_sha256||null;
       const period=data.first_session&&data.last_session ? `${data.first_session} → ${data.last_session}` : '';
-      const message=data.status==='evaluated'?`${symbol} · ${data.evaluated_observations} phiên đủ dữ liệu RV20 · ${alerts.length} sự kiện${period?' · '+period:''}.`:'Chưa đánh giá: thiếu dữ liệu SSI.';
+      const message=data.status==='evaluated'?`${symbol} · ${data.evaluated_observations}${data.observations!=null?'/'+data.observations:''} phiên tính được RV20 · ${data.event_count??alerts.length} cảnh báo ≥2${period?' · '+period:''}.`:'Chưa đánh giá: thiếu dữ liệu SSI.';
       q('#alerts table caption').textContent=`SSI EOD · ${symbol||'chưa chọn mã'} · ${period||'chưa có phiên trong khoảng chọn'}`;
       alertSummary=message;
       q('#alert-status').textContent=message;q('#overview-alert-state').textContent=message;
       renderAlerts();
-    }catch(error){if(id!==alertRevision)return;alerts=[];alertSummary='Chưa đánh giá: '+error.message;renderAlerts();q('#overview-alert-state').textContent='Chưa đánh giá · server local không phản hồi.';}
+    }catch(error){if(id!==alertRevision)return;if(quiet===true){q('#alert-status').textContent=alertSummary+' · Tạm thời chưa làm mới.';return;}
+      alerts=[];alertSummary='Chưa đánh giá: '+error.message;renderAlerts();q('#overview-alert-state').textContent='Chưa đọc được cảnh báo SSI.';}
     finally{if(id===alertRevision)q('#alert-refresh').disabled=false;}
   }
   ['alert-symbol','alert-priority','alert-from','alert-to'].forEach(id=>q('#'+id).addEventListener('change',()=>{page=1;q('#alert-evidence-panel').hidden=true;if(window.StaticLiquidity&&['alert-from','alert-to'].includes(id))loadAlerts();else renderAlerts();}));
@@ -226,6 +249,9 @@
   }).catch(()=>{q('#ssi-connection-detail').textContent='Không đọc được trạng thái local. SSI không được gắn nhãn LIVE.';});}
   window.addEventListener('market-state-change',()=>{if(!window.StaticLiquidity||location.hash==='#alerts')loadAlerts();});
   window.addEventListener('hashchange',()=>{if(location.hash==='#alerts')loadAlerts();});
+  if(window.StaticLiquidity)setInterval(()=>{
+    if(!document.hidden&&!document.body.classList.contains('guest')&&location.hash==='#alerts')loadAlerts(true);
+  },60000);
   loadBook();updateStatus();
   setInterval(()=>{if(!document.hidden)updateStatus();},5000);
 }());
