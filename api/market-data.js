@@ -6,7 +6,7 @@ module.exports = async function (req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') return res.status(405).json({error:'Method not allowed'});
   const {kind, symbol, resolution, board, q, page, size} = req.query;
-  if (!['history','series','live','intraday','catalog','market-delta'].includes(kind))
+  if (!['history','series','live','intraday','catalog','market-delta','book-checkpoints'].includes(kind))
     return res.status(400).json({error:'Unknown dataset'});
   if ((kind === 'series' || kind === 'market-delta' || (['intraday','live'].includes(kind) && symbol !== undefined)) &&
       (typeof symbol !== 'string' || !symbolPattern.test(symbol)))
@@ -88,6 +88,14 @@ module.exports = async function (req, res) {
             legacy?.symbols?.[row.symbol]?.['15m']?.at(-1)?.closed_at || null,
         })), total:matching.length, ...(paged ? {page:pageNumber,size:pageSize} : {})};
       }
+    } else if (kind === 'book-checkpoints') {
+      const sessions = ['morning','afternoon'];
+      const books = await Promise.all(sessions.map(session=>read('book-'+session)));
+      data = {sessions:books.flatMap((snapshot,index)=>snapshot ? [{
+        session:sessions[index], date:snapshot.date, saved_at:snapshot.updated_at || null,
+        symbols:Object.keys(snapshot.last_books || {}).length,
+        last_quote:Object.values(snapshot.last_books || {}).map(row=>row.quote_time).sort().at(-1) || null,
+      }] : [])};
     } else if (kind === 'live') {
       data = await read('live');
       const snapshotTime = Date.parse(data?.updated_at);

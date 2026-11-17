@@ -157,14 +157,16 @@ window.StaticLiquidity = (() => {
       && [row.symbol,row.symbolNameVi,row.symbolNameEn].some(value=>String(value||'').toLocaleLowerCase('vi').includes(search));
   }
 
+  const displayedBooks = new Map();
   async function liveBoard(q) {
-    const data=await load('live').catch(()=>null);
+    const data=await load('live');
+    if (!data) throw Error('Chưa có snapshot SSI để cập nhật bảng giá.');
     const age=Date.now()-Date.parse(data?.updated_at);
     const active=age>=0&&age<=15000;
     const directory = await marketDirectory().catch(()=>null);
     const metadata = new Map((directory?.securities||[]).map(row=>[row.symbol,row]));
     const liveRows = new Map((data?.rows || []).map(row=>[row.symbol,row]));
-    const members = [...new Set([...liveRows.keys(), ...Object.keys(data?.last_books || {})])].sort();
+    const members = [...new Set([...liveRows.keys(), ...Object.keys(data.last_books || {}), ...displayedBooks.keys()])].sort();
     const matching = members.map(symbol=>({...metadata.get(symbol), ...liveRows.get(symbol), symbol}))
       .filter(row=>boardMatches(row,q,{VN30:members}));
     const size=Number(q.get('size'))||30,pages=Math.max(1,Math.ceil(matching.length/size));
@@ -172,8 +174,12 @@ window.StaticLiquidity = (() => {
     const levels=side=>side.map(([price,quantity])=>({price,quantity}));
     const rows=matching.slice((page-1)*size,page*size).map(row=>{
       const current=active && freshTime(row.quote_time) && row.bids?.length && row.asks?.length;
-      const quote=current ? row : data?.last_books?.[row.symbol];
-      const status=current ? (row.status==='fresh_two_sided_quote'?'receiving':'Chưa xác minh phiên')
+      const candidate=current ? row : data.last_books?.[row.symbol];
+      const previous=displayedBooks.get(row.symbol);
+      const quote=candidate && (!previous || Date.parse(candidate.quote_time)>=Date.parse(previous.quote_time))
+        ? candidate : previous;
+      if (quote) displayedBooks.set(row.symbol, quote);
+      const status=current && quote===row ? (row.status==='fresh_two_sided_quote'?'receiving':'Chưa xác minh phiên')
         : (quote?'Bản chụp đã lưu':'waiting');
       return {...row, topic_supported:true, status,
         session:quote?.session ?? row.session, session_time:quote?.quote_time,

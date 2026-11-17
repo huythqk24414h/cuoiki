@@ -41,18 +41,63 @@
       q('#method-provenance').replaceChildren(node('dt','Phạm vi SSI hiện tại'),node('dd',`${data.scope}: ${data.catalog_count} mục, ${data.loaded_symbols} có lịch sử; ${data.sessions} phiên, ${data.first}–${data.last}`),node('dt','Độ phủ theo phiên'),node('dd',note),node('dt','Đơn vị / điều chỉnh'),node('dd','Source native; đơn vị mở rộng và chính sách điều chỉnh chưa xác minh đầy đủ. Không xuất turnover thực.'));
     }catch(e){text('#coverage-badge','BLOCKED · Không kiểm chứng được độ phủ: '+e.message);}
   }
-  async function loadIndex(){
+  const indexMode = node('select');
+  const indexModeLabel = node('label','Khung chỉ số ');
+  for (const [value,label] of [['15m','15 phút'],['eod','Lịch sử EOD']]) {
+    const option = node('option',label);
+    option.value=value;indexMode.append(option);
+  }
+  indexModeLabel.append(indexMode);
+  indexModeLabel.hidden=true;
+  q('#index-status').before(indexModeLabel);
+  let indexRequest=0,indexBusy=false,indexChart,indexVersion;
+  async function loadIndex(force=true){
+    const s=window.MarketState.value,code=q('#index-select').value;
+    if(!code || (!force && indexBusy))return;
+    const canShowIntraday=window.StaticLiquidity && code==='VNINDEX';
+    indexModeLabel.hidden=!canShowIntraday;
+    const target=q('#index-chart');
+    const ticket=++indexRequest;
+    indexBusy=true;
     try{
-      const s=window.MarketState.value,code=q('#index-select').value;if(!code)return;
+      if(canShowIntraday&&indexMode.value==='15m'){
+        const result=await request('/api/market/intraday?symbol=VNINDEX&resolution=15m');
+        if(ticket!==indexRequest)return;
+        const rows=result.rows;
+        if(!rows.length){
+          text('#index-status','VNINDEX · Chưa có nến SSI 15 phút. Có thể chọn Lịch sử EOD.');
+          return;
+        }
+        const latest=rows.at(-1), day=latest.closed_at.slice(0,10);
+        text('#index-status',`VNINDEX · ${fmt(latest.close)} điểm · Nến SSI 15 phút đóng ${latest.closed_at.slice(0,16).replace('T',' ')} ICT`);
+        if(!indexChart){target.replaceChildren();indexChart=echarts.init(target);}
+        if(indexVersion===result.retrieved_at)return;
+        indexVersion=result.retrieved_at;
+        const sameDay=rows.filter(row=>row.timestamp.startsWith(day));
+        indexChart.setOption({animation:false,tooltip:{trigger:'axis'},grid:{left:68,right:25,top:22,bottom:48},
+          xAxis:{type:'category',data:sameDay.map(row=>row.closed_at.slice(11,16))},
+          yAxis:{type:'value',scale:true,name:'Điểm'},
+          series:[{name:'VNINDEX',type:'line',data:sameDay.map(row=>Number(row.close)),showSymbol:true}]});
+        indexChart.resize();
+        return;
+      }
+      if(indexChart){indexChart.dispose();indexChart=null;indexVersion=undefined;}
       const data=await request('/api/market/index?'+new URLSearchParams({symbol:code,range:s.range,to:s.to,...(s.range==='CUSTOM'&&s.from?{from:s.from}:{})}));
+      if(ticket!==indexRequest)return;
       text('#index-status',`${code} · ${data.rows.length} phiên chính thức · ${data.source||'SSI indexSummary'} · ${data.rows.at(-1)?.tradingDate||'chưa có dữ liệu'}`);
       const valid=data.rows.filter(r=>r.indexValue!=null&&Number.isFinite(Number(r.indexValue))&&Number(r.indexValue)>0);
-      const target=q('#index-chart');target.replaceChildren();
+      target.replaceChildren();
       if(!valid.length){target.append(node('p',data.reason||'Không có giá trị chỉ số đã kiểm chứng trong khoảng.'));return;}
       const last=valid.at(-1);text('#index-status',`${code}: ${fmt(last.indexValue)} điểm · thay đổi ${fmt(last.indexChange)} điểm / ${fmt(last.indexChangePercentage)}% · ${last.tradingDate} · ${data.source||'SSI indexSummary'}`);
       chart('#index-chart','index_value',code,'điểm',{data:valid.map(r=>({date:r.tradingDate.slice(0,10).replaceAll('/','-'),symbol:code,index_value:r.indexValue,volume_shares:null})),source:data.source||'SSI indexSummary'});
-    }catch(e){text('#index-status','BLOCKED · '+e.message);q('#index-chart').replaceChildren();}
+    }catch(e){if(ticket===indexRequest)text('#index-status',code+' · Chưa cập nhật được dữ liệu SSI: '+e.message);}
+    finally{if(ticket===indexRequest)indexBusy=false;}
   }
+  indexMode.addEventListener('change',()=>{if(indexMode.value==='15m')q('#index-chart').replaceChildren();loadIndex();});
+  setInterval(()=>{
+    if(window.StaticLiquidity&&!document.hidden&&['','#monitor'].includes(location.hash)&&
+       q('#index-select').value==='VNINDEX'&&indexMode.value==='15m')loadIndex(false);
+  },15000);
   window.addEventListener('hashchange',syncToolbar);
   window.addEventListener('market-state-change',()=>{
     Object.assign(state,window.MarketState.value);syncToolbar();

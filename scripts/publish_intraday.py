@@ -81,7 +81,7 @@ def update(client, now):
     batch = int(os.environ.get("SSI_INTRADAY_BACKFILL_BATCH", "8"))
     if not 3 <= cap <= 40 or not 1 <= batch <= cap:
         raise ValueError("Invalid SSI intraday limits")
-    symbols = symbols[:cap]
+    symbols = ["VNINDEX", *symbols[:cap - 1]]
     cutoff = (now - timedelta(days=24)).date().isoformat()
     event = os.environ.get("GITHUB_EVENT_NAME")
     # Later scheduled runs only process their latest completed trading date. Manual
@@ -93,9 +93,9 @@ def update(client, now):
     total_bytes = 0
     for symbol in symbols:
         entry = entries.get(symbol)
-        if not entry and batch == 0:
+        if not entry and batch == 0 and symbol != "VNINDEX":
             continue
-        if not entry:
+        if not entry and symbol != "VNINDEX":
             batch -= 1
         previous = stored("intraday:"+symbol)
         candles = (previous or {}).get("candles", legacy.get("symbols", {}).get(symbol, {}))

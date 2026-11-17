@@ -96,7 +96,16 @@
     status.textContent=`${symbol} · ${r.status} · ${r.rows.length} nến · nến nguồn cuối ${vn(r.last_source_time)} · lần tải ${vn(r.retrieved_at)}${r.error?' · '+JSON.stringify(r.error):''}${r.refreshing?' · đang tải SSI':''}`;
     if(!chart)chart=echarts.init(plot);
     const zoom=chart.getOption()?.dataZoom;
-    chart.setOption({animation:false,tooltip:{trigger:'axis'},grid:{left:80,right:24,bottom:65},xAxis:{type:'category',data:r.rows.map(candleLabel)},yAxis:{scale:true,name:'Giá nguồn'},dataZoom:zoom?.length?zoom:[{type:'inside'},{type:'slider'}],series:[{type:'candlestick',data:r.rows.map(x=>[x.open,x.close,x.low,x.high].map(Number)),itemStyle:{color:'#08764C',color0:'#BA2540',borderColor:'#08764C',borderColor0:'#BA2540'}}]},true);chart.resize();
+    const labels=r.rows.map(candleLabel);
+    chart.setOption({animation:false,tooltip:{trigger:'axis'},axisPointer:{link:[{xAxisIndex:'all'}]},
+      grid:[{left:80,right:24,top:18,bottom:'44%'},{left:80,right:24,top:'63%',bottom:58}],
+      xAxis:[{type:'category',data:labels,axisLabel:{show:false}},{type:'category',gridIndex:1,data:labels}],
+      yAxis:[{scale:true,name:'Giá nguồn'},{gridIndex:1,name:'Khối lượng'}],
+      dataZoom:zoom?.length?zoom:[{type:'inside',xAxisIndex:[0,1]},{type:'slider',xAxisIndex:[0,1]}],
+      series:[{type:'candlestick',name:'OHLC',data:r.rows.map(x=>[x.open,x.close,x.low,x.high].map(Number)),
+        itemStyle:{color:'#08764C',color0:'#BA2540',borderColor:'#08764C',borderColor0:'#BA2540'}},
+        {type:'bar',name:'Khối lượng',xAxisIndex:1,yAxisIndex:1,data:r.rows.map(x=>Number(x.volume)),itemStyle:{color:'#236ba7'}}]},true);
+    chart.resize();
    }else{
     const r=await request('/api/market/depth-warning?'+new URLSearchParams({symbol}));
     ws.textContent=`${r.symbol} · ${r.state} · ${r.valid_samples}/${r.samples} mẫu hợp lệ · ${r.reason||r.method||'Đang chờ mẫu SSI thật'}${r.anchor_time?' · thời điểm gốc '+vn(r.anchor_time):''}${r.label!=null?' · kết quả quan sát '+r.label:''}`;

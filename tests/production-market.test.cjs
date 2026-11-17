@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const {readFileSync} = require('node:fs');
+const {runInNewContext} = require('node:vm');
 const handle = require('../api/market-data.js');
 
 test('catalog pagination, coverage, missing symbol, and Redis failure', async (t) => {
@@ -52,4 +54,28 @@ test('catalog pagination, coverage, missing symbol, and Redis failure', async (t
   assert.deepEqual(withAfternoon.last_books.X1,afternoonBook);
   store.mock.mockImplementation(async()=>({ok:false}));
   assert.equal((await get({kind:'catalog'}))[0],502);
+});
+
+test('production board keeps the last two-sided quote across missing and older snapshots', async () => {
+  const time = new Date().toISOString();
+  const original = {symbol:'ACB',quote_time:time,bids:[[20,100]],asks:[[21,200]]};
+  let snapshot = {updated_at:time,rows:[original]};
+  const window = {};
+  runInNewContext(readFileSync(require.resolve('../demo/static-api.js'),'utf8'),{
+    window, URLSearchParams, fetch:async url=>({
+      ok:snapshot!==null, status:snapshot===null?502:200,
+      json:async()=>url.includes('kind=live')?snapshot:{},
+    }),
+  });
+  const read=()=>window.StaticLiquidity.request(new URL('https://example.test/api/market/board?mode=DATA'));
+  assert.equal((await read()).rows[0].bids[0].price,20);
+  snapshot={updated_at:time,rows:[{symbol:'ACB',bids:[],asks:[]}],last_books:{
+    ACB:{...original,quote_time:'2026-11-16T11:00:00+07:00',bids:[[19,90]]},
+  }};
+  const saved=(await read()).rows[0];
+  assert.equal(saved.bids[0].price,20);
+  assert.equal(saved.status,'Bản chụp đã lưu');
+  assert.equal(saved.received_at,time);
+  snapshot=null;
+  await assert.rejects(read,/tạm thời không truy cập/);
 });

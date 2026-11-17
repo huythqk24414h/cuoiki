@@ -1,5 +1,11 @@
 name: SSI Intraday OHLCV
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ssi-intraday.yml'
+      - 'scripts/run_intraday_session.py'
+      - 'scripts/publish_intraday.py'
   workflow_dispatch:
     inputs:
       batch_size:
@@ -11,7 +17,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: '17 2 * * 1-5'
+    - cron: '32 2 * * 1-5'
 permissions:
   contents: read
 concurrency:
@@ -23,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 345
     env:
-      SSI_INTRADAY_FOLLOW_SESSION: ${{ github.event_name == 'schedule' || inputs.follow_session }}
+      SSI_INTRADAY_FOLLOW_SESSION: ${{ github.event_name != 'workflow_dispatch' || inputs.follow_session }}
       SSI_INTRADAY_SYMBOLS: ${{ vars.SSI_INTRADAY_SYMBOLS || 'VN30' }}
       SSI_INTRADAY_BACKFILL_BATCH: ${{ inputs.batch_size || vars.SSI_INTRADAY_BACKFILL_BATCH || 8 }}
       SSI_INTRADAY_MAX_SYMBOLS: ${{ vars.SSI_INTRADAY_MAX_SYMBOLS || 32 }}

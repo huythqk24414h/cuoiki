@@ -11,7 +11,7 @@ from scripts.publish_intraday import VN
 
 def session_ticks(day):
     # Allow two minutes for the source to publish each closed candle.
-    slots = [(9, 17), (9, 32), (9, 47)]
+    slots = [(9, 32), (9, 47)]
     slots += [(hour, minute) for hour in (10, 13) for minute in (2, 17, 32, 47)]
     slots += [(11, minute) for minute in (2, 17, 32)]
     slots += [(14, minute) for minute in (2, 17, 32)]
@@ -28,8 +28,8 @@ def main():
         print("Weekend: no scheduled intraday collection.", flush=True)
         return 0
     if now.time() < clock(9):
-        print("Start session mode at or after 09:00 ICT.", flush=True)
-        return 1
+        print("Session refresh starts at 09:32 ICT.", flush=True)
+        return 0
 
     env = {**os.environ, "SSI_INTRADAY_INCREMENTAL": "true"}
     failures = 0
