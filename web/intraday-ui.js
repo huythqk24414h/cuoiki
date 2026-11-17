@@ -59,7 +59,8 @@
      const label=intraday?'SSI trong phiên':last?.provisional?'SSI EOD và kỳ đang mở':'SSI EOD';
      const stamp=last?.provisional?`${asOf} · Đang mở, tạm tính đến ${vn(last.closed_at)}`:asOf;
      sessionStamp.textContent=last?`${label} · ${symbol} · ${stamp}`:`${label} · ${symbol} · chưa có dữ liệu`;
-     overviewStatus.textContent=last?`${symbol} · ${rows.length} kỳ · ${stamp}`:
+     const retrieved=(intraday?data:minutes)?.retrieved_at;
+     overviewStatus.textContent=last?`${symbol} · ${rows.length} kỳ · ${stamp}${retrieved?' · Lần tải '+vn(retrieved):''}`:
        `${symbol} · Chưa có nến cho khung này. Có thể chọn khung nhỏ hơn hoặc lịch sử EOD.`;
      if(!rows.length){ChartKit.destroy(overviewPlot);overviewRevision=undefined;return;}
      const revision=[key,rows.length,last.date,last.close_vnd,last.volume_shares,last.closed_at,data.retrieved_at,data.revision].join(':');
@@ -73,9 +74,6 @@
      }
    }finally{if(ticket===overviewVersion)overviewBusy=false;}
  }
- function candleLabel(row){
-   return String(row.closed_at||row.timestamp).slice(0,16).replace('T',' ');
- }
  function switchOverview(){
    const intraday=ChartKit.intradayFrame(overviewSelect.value);
    overviewPane.hidden=false;
@@ -87,7 +85,7 @@
  window.addEventListener('market-state-change',()=>refreshOverview(true));
  window.addEventListener('hashchange',()=>refreshOverview(true));
  document.addEventListener('visibilitychange',()=>refreshOverview());
- setInterval(refreshOverview,window.StaticLiquidity?60000:5000);
+ setInterval(refreshOverview,ChartKit.refreshMs());
  switchOverview();
  async function update(){
   if(busy||document.hidden||document.body.classList.contains('guest'))return;
@@ -99,17 +97,7 @@
     if(symbol!==(window.MarketState.value.symbol||'SSI')||resolution!==select.value)return;
     status.textContent=`${symbol} · ${r.status} · ${r.rows.length} nến · nến nguồn cuối ${vn(r.last_source_time)} · lần tải ${vn(r.retrieved_at)}${r.error?' · '+JSON.stringify(r.error):''}${r.refreshing?' · đang tải SSI':''}`;
     if(!chart)chart=echarts.init(plot);
-    const zoom=chart.getOption()?.dataZoom;
-    const labels=r.rows.map(candleLabel);
-    chart.setOption({animation:false,tooltip:{trigger:'axis'},axisPointer:{link:[{xAxisIndex:'all'}]},
-      grid:[{left:80,right:24,top:18,bottom:'44%'},{left:80,right:24,top:'63%',bottom:58}],
-      xAxis:[{type:'category',data:labels,axisLabel:{show:false}},{type:'category',gridIndex:1,data:labels}],
-      yAxis:[{scale:true,name:'Giá nguồn'},{gridIndex:1,name:'Khối lượng'}],
-      dataZoom:zoom?.length?zoom:[{type:'inside',xAxisIndex:[0,1]},{type:'slider',xAxisIndex:[0,1]}],
-      series:[{type:'candlestick',name:'OHLC',data:r.rows.map(x=>[x.open,x.close,x.low,x.high].map(Number)),
-        itemStyle:{color:'#08764C',color0:'#BA2540',borderColor:'#08764C',borderColor0:'#BA2540'}},
-        {type:'bar',name:'Khối lượng',xAxisIndex:1,yAxisIndex:1,data:r.rows.map(x=>Number(x.volume)),itemStyle:{color:'#236ba7'}}]},true);
-    chart.resize();
+    ChartKit.drawFinancial(chart,ChartKit.intradayRows(r.rows,resolution,symbol),{zoom:ChartKit.financialZoom(chart)});
    }else{
     const r=await request('/api/market/depth-warning?'+new URLSearchParams({symbol}));
     if(symbol!==(window.MarketState.value.symbol||'SSI')||location.hash!=='#alerts')return;
@@ -124,6 +112,6 @@
    }
   }catch(e){(page==='analysis'?status:ws).textContent='Chưa đọc được dữ liệu: '+e.message;}finally{busy=false;}
  }
- select.addEventListener('change',update);window.addEventListener('hashchange',update);window.addEventListener('market-state-change',update);window.addEventListener('resize',()=>chart?.resize());setInterval(update,window.StaticLiquidity?60000:5000);update();
+ select.addEventListener('change',update);window.addEventListener('hashchange',update);window.addEventListener('market-state-change',update);window.addEventListener('resize',()=>chart?.resize());setInterval(update,ChartKit.refreshMs());update();
  if(window.StaticLiquidity)setInterval(()=>{if(location.hash==='#alerts')update();},5000);
 })();

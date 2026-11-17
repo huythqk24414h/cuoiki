@@ -92,7 +92,7 @@
       text('#index-status',[code,fmt(last.close_vnd)+' điểm',source,time].join(' · '));
       const version=[key,rows.length,last.date,last.close_vnd,last.closed_at,data.retrieved_at,data.revision].join(':');
       if(indexVersion===version&&!force)return;
-      ChartKit.render(target,rows,'close_vnd','Chỉ số','điểm',{financial:true,intraday,source,volumePane:false,defaultType:'line'});
+      ChartKit.render(target,rows,'close_vnd','Chỉ số','Điểm',{financial:true,intraday,source,volumePane:intraday,defaultType:'line'});
       indexVersion=version;
     }catch(error){
       if(ticket===indexRequest)text('#index-status',code+' · Chưa cập nhật được dữ liệu SSI: '+error.message);
@@ -102,7 +102,7 @@
   function refreshIndex(){
     if(window.StaticLiquidity&&!document.hidden&&!document.body.classList.contains('guest')&&['','#monitor'].includes(location.hash))loadIndex(false);
   }
-  setInterval(refreshIndex,60000);
+  setInterval(refreshIndex,ChartKit.refreshMs());
   document.addEventListener('visibilitychange',refreshIndex);
   window.addEventListener('hashchange',syncToolbar);
   window.addEventListener('market-state-change',()=>{

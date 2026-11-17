@@ -131,3 +131,24 @@ test('chart frames aggregate genuine candles without bridging lunch or filling g
   assert.equal(kit.withOpenDay(past,minuteBars,'VNINDEX','2026-11-16','2026-11-17').length,1);
   assert.equal(kit.withOpenDay(provisional,minuteBars,'VNINDEX',null,'2026-11-17').length,2);
 });
+
+test('the financial chart tooltip keeps full SSI data in all display modes', () => {
+  const window={addEventListener(){}};
+  runInNewContext(readFileSync(require.resolve('../web/chart-kit.js'),'utf8'),{
+    window, document:{documentElement:{}}, MutationObserver:class{observe(){}},
+  });
+  const rows=[{symbol:'LPB',date:'2026-11-17',closed_at:'2026-11-17T11:00:00+07:00',
+    open_vnd:37200,high_vnd:37250,low_vnd:37150,close_vnd:37200,volume_shares:59100,provisional:true}];
+  for(const type of ['candlestick','hollow','bar','line','area','baseline']){
+    let options;
+    const chart={setOption(value){options=value;},resize(){}};
+    window.ChartKit.drawFinancial(chart,rows,{type,zoom:{start:25,end:100}});
+    assert.equal(options.tooltip.trigger,'axis');
+    const tooltip=options.tooltip.formatter([{dataIndex:0}]);
+    assert.match(tooltip,/LPB · 2026-11-17 11:00/);
+    assert.match(tooltip,/Kỳ đang mở/);
+    for(const label of ['Mở cửa','Cao nhất','Thấp nhất','Đóng cửa','Khối lượng'])assert.ok(tooltip.includes(label));
+    assert.equal(options.series[1].data[0],59100);
+    assert.equal(options.dataZoom[1].start,25);
+  }
+});
