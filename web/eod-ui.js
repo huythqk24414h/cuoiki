@@ -290,12 +290,50 @@
     target.append(reset);
     target.append(frame,tooltip,node('p',`${rows[0]?.symbol||state.symbol} · ${label} (${unit}) · ${options.source||'SSI FastConnect V3'} · ${rows[0]?.date||'—'}–${rows.at(-1)?.date||'—'}`,'helper'));
   }
+  let analysisData,analysisRequest=0,analysisBusy=false,analysisVersion;
+  function renderAnalysisCharts(){
+    const preview=analysisData?.key===String(params())?analysisData.payload:null;
+    const data=preview?.analysis_rows||state.rows;
+    const open=preview?.open_session;
+    const options={data,source:open?'SSI EOD + kỳ đang mở':'SSI FastConnect V3'};
+    const time=open?.closed_at.slice(11,16);
+    if(open){
+      text('#analysis-context',`${state.symbol} · EOD ${preview.last_available_session||'chưa có'} · Phiên ${open.date} đang mở, tạm tính đến ${time} ICT.`);
+    }else if(preview){
+      text('#analysis-context',`${state.symbol} · SSI EOD đến ${preview.last_available_session||'chưa có phiên trong khoảng chọn'}.`);
+    }
+    text('#value-chart-note',open&&open.source_value_vnd==null?
+      'SSI chưa có đủ trường value cho phần phiên đang mở. Giá trị cuối ngày vẫn xem được trên biểu đồ.':
+      'Tổng trường value do SSI trả về trong phần đã quan sát. Đơn vị nguồn chưa xác minh là GTGD thực.');
+    text('#analysis-live-scope',open?
+      'Điểm có dấu * dùng nến SSI M15 đã đóng. RV20 tạm tính với TB20 phiên đã chốt; Volatility20 dùng giá gần nhất của phiên đang mở cùng 19 lợi suất trước.':
+      'Phần trong phiên xuất hiện khi có nến SSI M15 và khoảng ngày cho phép.');
+    chart('#volume-trend-chart','volume_shares',state.resolution==='1D'?'Khối lượng phiên & TB20 trước':'Khối lượng tổng hợp','đơn vị KL nguồn',{...options,bars:true,volumeComparison:state.resolution==='1D'});
+    chart('#relative-chart','relative_volume20','Khối lượng tương đối','lần',options);
+    chart('#volatility-chart','volatility20_pct','Volatility20','%',options);
+    chart('#value-chart','source_value_vnd','Proxy SSI value','đơn vị nguồn',options);
+  }
+  async function loadAnalysis(force=false){
+    if(!window.StaticLiquidity||document.hidden||document.body.classList.contains('guest')||
+       location.hash!=='#analysis'||!state.symbol||analysisBusy&&!force)return;
+    const key=String(params()),ticket=++analysisRequest;
+    analysisBusy=true;
+    try{
+      const payload=await request('/api/market/series?'+key+'&preview=1');
+      if(ticket!==analysisRequest||key!==String(params()))return;
+      const open=payload.open_session;
+      const version=[key,payload.revision,payload.last_available_session,open?.closed_at,open?.volume_shares,open?.close_vnd,open?.source_value_vnd].join(':');
+      if(version===analysisVersion)return;
+      analysisVersion=version;
+      analysisData={key,payload};
+      renderAnalysisCharts();
+    }catch(error){
+      if(ticket===analysisRequest&&key===String(params()))text('#analysis-live-scope','Tạm thời chưa đọc được cập nhật SSI. '+error.message);
+    }finally{if(ticket===analysisRequest)analysisBusy=false;}
+  }
   function renderCharts() {
     if(!q('#price-chart').hidden)chart('#price-chart','close_vnd','Giá đóng cửa','đơn vị giá nguồn',{main:true});
-    chart('#volume-trend-chart','volume_shares',state.resolution==='1D'?'Khối lượng phiên & TB20 trước':'Khối lượng tổng hợp (không so với TB20 ngày)','đơn vị KL nguồn',{bars:true,volumeComparison:state.resolution==='1D'});
-    chart('#relative-chart','relative_volume20','Khối lượng tương đối','lần');
-    chart('#volatility-chart','volatility20_pct','Volatility20','%');
-    chart('#value-chart','source_value_vnd','Proxy SSI value','đơn vị nguồn');
+    renderAnalysisCharts();
   }
   function filteredRows() {
     const query=state.search.trim().toUpperCase();
@@ -364,7 +402,7 @@
       if(ticket!==revision) return;
       if(!payload.available) throw new Error((payload.issues || []).join(' · ') || 'Chưa có snapshot đã kiểm chứng.');
       state.rows=payload.rows;state.summary=payload.summary;state.page=1;document.querySelectorAll('.chart-stage').forEach(n=>delete n._zoom);
-      renderSummary(payload);renderCharts();renderTable();text('#global-source',`Historical EOD · SSI · ${state.symbol} · nến ${payload.resolution} · cập nhật hợp lệ ${payload.last_available_session||'chưa có'} · ${payload.unit_status}`);return true;
+      renderSummary(payload);renderCharts();renderTable();loadAnalysis(true);text('#global-source',`Historical EOD · SSI · ${state.symbol} · nến ${payload.resolution} · cập nhật hợp lệ ${payload.last_available_session||'chưa có'} · ${payload.unit_status}`);return true;
     } catch(error) {
       if(ticket!==revision) return;
       const message=`Không thể dùng snapshot: ${error.message}. Kiểm tra file bằng scripts/validate_demo_eod.py; mở Phương pháp để xem giới hạn.`;
@@ -422,7 +460,11 @@
   document.querySelectorAll('[data-series]').forEach(button => button.addEventListener('click',() => {
     const series=button.dataset.series;state[series]=!state[series];button.setAttribute('aria-pressed',String(state[series]));renderCharts();
   }));
-  q('#refresh').addEventListener('click',async () => {await loadSnapshot();toast(state.meta?.available?'Đã đọc và kiểm chứng lại snapshot local. Không gọi nguồn internet.':'Snapshot chưa khả dụng. Xem thông báo và kiểm tra file local.');});
+  if(window.StaticLiquidity)q('#refresh').textContent='Làm mới dữ liệu';
+  q('#refresh').addEventListener('click',async () => {
+    await loadSnapshot();
+    toast(state.meta?.available?(window.StaticLiquidity?'Đã đọc dữ liệu SSI mới nhất trên web.':'Đã kiểm tra lại snapshot local.'):'Chưa đọc được dữ liệu.');
+  });
   q('#ranking-metric').addEventListener('change',loadRankings);
   q('#table-search').addEventListener('input',event => {state.search=event.target.value;state.page=1;renderTable();});
   document.querySelectorAll('[data-sort]').forEach(button => button.addEventListener('click',() => {
@@ -446,7 +488,9 @@
     toast(`Đã xuất ${rows.length} dòng khớp bộ lọc, gồm nguồn và ngày chốt. Số thập phân giữ nguyên từ CSV.`);
   });
   window.addEventListener('chart-theme-change',()=>{if(state.rows.length)renderCharts();loadIndex();});
-  window.addEventListener('hashchange',() => {if(state.rows.length) renderCharts();loadIndex();});
+  window.addEventListener('hashchange',() => {if(state.rows.length) renderCharts();loadIndex();loadAnalysis(true);});
+  document.addEventListener('visibilitychange',()=>loadAnalysis());
+  setInterval(()=>loadAnalysis(),ChartKit.refreshMs());
   let resizeTimer;
   window.addEventListener('resize',() => {clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.rows.length) renderCharts();},150);});
   loadSnapshot();

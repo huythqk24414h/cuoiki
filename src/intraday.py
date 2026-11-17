@@ -22,6 +22,12 @@ def normalize(raw,symbol):
         o,h,l,c,v=values
         if not all(x.is_finite() for x in values) or min(o,h,l,c)<=0 or h<max(o,c,l) or l>min(o,c,h) or v<0:raise ValueError('Invalid intraday OHLC')
         row=dict(timestamp=dt.isoformat(),open=str(o),high=str(h),low=str(l),close=str(c),volume=str(v))
+        try:
+            value = Decimal(str(r.get("value")))
+            if value.is_finite() and (value > 0 or value == 0 and v == 0):
+                row["source_value"] = str(value)
+        except ArithmeticError:
+            pass
         key=row['timestamp']
         if key in out and out[key]!=row:raise ValueError('Conflicting intraday duplicate')
         out[key]=row
@@ -40,7 +46,16 @@ def aggregate(rows,resolution,windows=HOSE_WINDOWS):
         bucket=anchor+(minute-anchor)//minutes*minutes
         key=dt.replace(hour=bucket//60,minute=bucket%60,second=0,microsecond=0).isoformat()
         groups.setdefault(key,[]).append(r)
-    return [dict(timestamp=k,open=g[0]['open'],close=g[-1]['close'],high=str(max(Decimal(x['high']) for x in g)),low=str(min(Decimal(x['low']) for x in g)),volume=str(sum(Decimal(x['volume']) for x in g)),observed_minutes=len(g),nominal_minutes=minutes,partial=len(g)<minutes) for k,g in sorted(groups.items())]
+    result=[]
+    for key, group in sorted(groups.items()):
+        bar=dict(timestamp=key,open=group[0]['open'],close=group[-1]['close'],
+                 high=str(max(Decimal(row['high']) for row in group)),low=str(min(Decimal(row['low']) for row in group)),
+                 volume=str(sum(Decimal(row['volume']) for row in group)),observed_minutes=len(group),
+                 nominal_minutes=minutes,partial=len(group)<minutes)
+        if all("source_value" in row for row in group):
+            bar["source_value"]=str(sum(Decimal(row["source_value"]) for row in group))
+        result.append(bar)
+    return result
 
 def refresh(symbol):
     try:

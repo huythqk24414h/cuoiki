@@ -63,6 +63,6 @@
  window.addEventListener('demo-guest',()=>{toggle.hidden=motion.matches;elapsed=0;start();});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else start();});
  motion.addEventListener('change',()=>{toggle.hidden=motion.matches;if(motion.matches)stop();else start();});
- window.addEventListener('resize',resize);toggle.hidden=motion.matches;start();
+ window.addEventListener('resize',resize);toggle.hidden=motion.matches||!document.body.classList.contains('guest');start();
  window.WelcomeFX=Object.freeze({phases:[...phases],start,stop});
 })();

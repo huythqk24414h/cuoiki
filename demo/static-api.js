@@ -20,6 +20,7 @@ window.StaticLiquidity = (() => {
     setInterval(checkRelease,300000);
   }
   const unavailable = 'Tính năng này cần dữ liệu SSI trong ứng dụng chạy trên máy.';
+  const numeric = value=>value==null||value===''||!Number.isFinite(Number(value))?null:Number(value);
   function aggregate(rows, resolution) {
     if (resolution === '1D') return rows;
     const periods = new Map();
@@ -30,9 +31,32 @@ window.StaticLiquidity = (() => {
       const previous = periods.get(key);
       periods.set(key, previous ? {...row, open_vnd:previous.open_vnd,
         high_vnd:Math.max(previous.high_vnd,row.high_vnd),low_vnd:Math.min(previous.low_vnd,row.low_vnd),
-        volume_shares:Number(previous.volume_shares)+Number(row.volume_shares)} : row);
+        volume_shares:Number(previous.volume_shares)+Number(row.volume_shares),
+        source_value_vnd:numeric(previous.source_value_vnd)!=null&&numeric(row.source_value_vnd)!=null
+          ? Number(previous.source_value_vnd)+Number(row.source_value_vnd):null} : row);
     }
     return [...periods.values()];
+  }
+  function openSession(history, bars, symbol, today){
+    if(!history.length||history.at(-1).date>=today)return null;
+    const observed=bars.filter(bar=>bar.timestamp?.startsWith(today+'T')&&bar.closed_at?.startsWith(today+'T')&&
+      ['open','high','low','close','volume'].every(key=>numeric(bar[key])!=null));
+    if(!observed.length)return null;
+    const prior=history.slice(-20);
+    const volumes=prior.map(row=>numeric(row.volume_shares));
+    const average=volumes.length===20&&volumes.every(v=>v!=null&&v>=0)?volumes.reduce((a,b)=>a+b,0)/20:null;
+    const closes=[...prior.map(row=>numeric(row.close_vnd)),numeric(observed.at(-1).close)];
+    const returns=closes.length===21&&closes.every(v=>v!=null&&v>0)?
+      closes.slice(1).map((close,i)=>(close/closes[i]-1)*100):null;
+    const mean=returns?.reduce((a,b)=>a+b,0)/20;
+    const volume=observed.reduce((sum,bar)=>sum+Number(bar.volume),0);
+    const value=observed.every(bar=>numeric(bar.source_value)!=null)?
+      observed.reduce((sum,bar)=>sum+Number(bar.source_value),0):null;
+    return {symbol,date:today,provisional:true,closed_at:observed.at(-1).closed_at,
+      open_vnd:Number(observed[0].open),close_vnd:closes.at(-1),
+      high_vnd:Math.max(...observed.map(bar=>Number(bar.high))),low_vnd:Math.min(...observed.map(bar=>Number(bar.low))),
+      volume_shares:volume,volume_avg20_previous:average,relative_volume20:average>0?volume/average:null,
+      volatility20_pct:returns?Math.sqrt(returns.reduce((sum,r)=>sum+(r-mean)**2,0)/19):null,source_value_vnd:value};
   }
 
   function enrichArchive(rows) {
@@ -155,6 +179,13 @@ window.StaticLiquidity = (() => {
     if(path!=='index' && !data.symbols[symbol]) rows=enrichArchive(rows);
     const members=(await marketDirectory())?.index_memberships?.VN30||[];
     const lower=q.get('period')!=='recent'&&(symbol==='VN30'||members.includes(symbol)) ? '2000-07-28' : '2022-01-01';
+    const preview=q.get('preview')==='1'&&path==='series';
+    const today=vietnamDay();
+    let open=null;
+    if(preview&&(q.get('range')!=='CUSTOM'||((!q.get('to')||q.get('to')>=today)&&(!q.get('from')||q.get('from')<=today)))&&rows.at(-1)?.date<today){
+      const intraday=await load('intraday',symbol,'15m');
+      open=openSession(rows,intraday?.rows||[],symbol,today);
+    }
     rows=rows.filter(row=>row.date>=lower);
     const filter=q.get('range');
     const end=filter==='CUSTOM' ? q.get('to') || last : rows.at(-1)?.date || last;
@@ -168,6 +199,7 @@ window.StaticLiquidity = (() => {
     const resolution=q.get('resolution')||'1D', summary=rows.at(-1);
     const omitted=data.symbols[symbol]?.quarantined_dates?.length || 0;
     return {available:true,rows:aggregate(rows,resolution),summary,resolution,revision:version,
+      ...(preview?{analysis_rows:aggregate(open?[...rows,open]:rows,resolution),open_session:open}:{}),
       last_available_session:summary?.date,message:(data.symbols[symbol]||saved||summary)?null:'Mã này chưa có lịch sử SSI được nạp.',unit_status:'Đơn vị nguồn SSI'+(omitted ? ' · '+omitted+' phiên OHLCV bị cách ly' : '')};
   }
   function boardMatches(row, q, members) {

@@ -152,3 +152,31 @@ test('the financial chart tooltip keeps full SSI data in all display modes', () 
     assert.equal(options.dataZoom[1].start,25);
   }
 });
+
+test('analysis preview adds source value and partial metrics without changing official EOD', async () => {
+  const day=offset=>new Date(Date.now()+7*3600000+offset*86400000).toISOString().slice(0,10);
+  const history=Array.from({length:20},(_,i)=>({symbol:'LPB',date:day(i-20),close_vnd:100,volume_shares:50,source_value_vnd:5000}));
+  const today=day(0);
+  const bars=[0,1].map(i=>({timestamp:today+`T09:${i?'30':'15'}:00+07:00`,
+    closed_at:today+`T09:${i?'45':'30'}:00+07:00`,open:100,high:111,low:98,close:110,volume:25,source_value:500}));
+  const window={};
+  runInNewContext(readFileSync(require.resolve('../demo/static-api.js'),'utf8'),{window,URLSearchParams,
+    fetch:async path=>{
+      const kind=new URL(path,'https://test.invalid').searchParams.get('kind');
+      const data={history:{indexes:[],symbols:{LPB:{first:day(-20),last:day(-1)}}},series:history,
+        catalog:{index_memberships:{VN30:['LPB']}},intraday:{rows:bars}}[kind]||{};
+      return {ok:true,headers:{get:()=> 'application/json'},json:async()=>data};
+    }});
+  const read=query=>window.StaticLiquidity.request(new URL('/api/market/series?symbol=LPB&range=1D&'+query,'https://test.invalid'));
+  const official=await read('resolution=1D');
+  const preview=await read('resolution=1D&preview=1');
+  assert.equal(official.summary.date,day(-1));
+  assert.equal(preview.rows.length,1);
+  assert.equal(preview.open_session.date,today);
+  assert.equal(preview.open_session.provisional,true);
+  assert.equal(preview.open_session.relative_volume20,1);
+  assert.equal(preview.open_session.source_value_vnd,1000);
+  assert.ok(Math.abs(preview.open_session.volatility20_pct-Math.sqrt(5))<1e-12);
+  delete bars[1].source_value;
+  assert.equal((await read('resolution=1D&preview=1')).open_session.source_value_vnd,null);
+});

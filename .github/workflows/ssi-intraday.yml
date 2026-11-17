@@ -6,6 +6,7 @@ on:
       - '.github/workflows/ssi-intraday.yml'
       - 'scripts/run_intraday_session.py'
       - 'scripts/publish_intraday.py'
+      - 'src/intraday.py'
   workflow_dispatch:
     inputs:
       batch_size:
@@ -22,7 +23,7 @@ permissions:
   contents: read
 concurrency:
   group: ssi-intraday
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 jobs:
   update:
     if: github.ref == 'refs/heads/main' && vars.SSI_PUBLISH_EOD == 'true'
