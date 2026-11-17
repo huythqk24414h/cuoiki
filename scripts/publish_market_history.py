@@ -48,6 +48,13 @@ def backfill(client, symbol, first, last, quarantined):
                     continue
                 row = dict.fromkeys(FIELDS)
                 row.update(symbol=symbol, date=day, close_vnd=str(close), price_adjustment="unknown")
+                try:
+                    opening, high, low = (Decimal(str(item[key])) for key in ("open", "high", "low"))
+                    if (all(value.is_finite() and value > 0 for value in (opening, high, low))
+                            and low <= min(opening, close) <= max(opening, close) <= high):
+                        row.update(open_vnd=str(opening), high_vnd=str(high), low_vnd=str(low))
+                except (ArithmeticError, KeyError, TypeError, ValueError):
+                    pass
             else:
                 try:
                     row = canonical_row(item, symbol, str(first), str(last))
@@ -72,7 +79,7 @@ def backfill(client, symbol, first, last, quarantined):
     return rows
 
 
-def prepare_symbol(client, symbol, provider, start, end, entry, full):
+def prepare_symbol(client, symbol, provider, start, end, entry, full, refresh_index=False):
     old = []
     if entry:
         raw = redis(["GET", entry["key"]])
@@ -81,12 +88,21 @@ def prepare_symbol(client, symbol, provider, start, end, entry, full):
         old = json.loads(raw)
         if not old or old[-1]["date"] != entry["last"]:
             raise RuntimeError("Stored history does not match checkpoint")
-    first = max(start, min(end, date.fromisoformat(old[-1]["date"])) - timedelta(days=10)) if old and not full else start
+    first = (max(start, min(end, date.fromisoformat(old[-1]["date"])) - timedelta(days=10))
+             if old and not full and not refresh_index else start)
     if first > end:
         return old, old, entry.get("quarantined_dates", []) if entry else []
     combined = {} if full else {row["date"]: row for row in old if row["date"] >= start.isoformat()}
     rejected = set()
-    combined.update(backfill(client, provider, first, end, rejected))
+    fresh = backfill(client, provider, first, end, rejected)
+    if symbol in INDEX_CODES:
+        old_by_date = {row["date"]: row for row in old}
+        for day, row in fresh.items():
+            previous = old_by_date.get(day)
+            if (previous and row["open_vnd"] is None
+                    and Decimal(row["close_vnd"]) == Decimal(previous["close_vnd"])):
+                row.update({key: previous.get(key) for key in ("open_vnd", "high_vnd", "low_vnd")})
+    combined.update(fresh)
     if rejected:
         print(f"{symbol}: quarantined {len(rejected)} malformed OHLCV bars "
               f"({min(rejected)} to {max(rejected)})", flush=True)
@@ -111,11 +127,12 @@ def update(client, now):
     directory = refresh_directory(client, now)
     symbols, metadata = select_symbols(directory, "SSI_EOD_SYMBOLS", BASE_DAILY)
     full = os.environ.get("SSI_FULL_BACKFILL") == "true"
+    index_only = os.environ.get("SSI_EOD_INDEX_ONLY") == "true"
     limit = int(os.environ.get("SSI_EOD_BACKFILL_BATCH", "8"))
     if not 1 <= limit <= 40 or len(symbols) > 80:
         raise ValueError("EOD limits: at most 80 configured equities and 1–40 new series per run")
 
-    providers = {**INDEX_CODES, **{s:s for s in symbols}}
+    providers = INDEX_CODES if index_only else {**INDEX_CODES, **{s:s for s in symbols}}
     failures = []
     pending = limit
     for symbol, provider in providers.items():
@@ -127,7 +144,8 @@ def update(client, now):
         first_trading = metadata.get(symbol, {}).get("firstTradingDate")
         start = max(date.fromisoformat(first_trading) if first_trading and not entry else START, CURRENT_LISTING_START.get(symbol, START))
         try:
-            old, rows, quarantined = prepare_symbol(client, symbol, provider, start, end, entry, full)
+            old, rows, quarantined = prepare_symbol(client, symbol, provider, start, end, entry, full,
+                                                    refresh_index=index_only)
         except Exception as error:
             print(f"{symbol}: not updated ({safe_error(error)})", flush=True)
             failures.append(symbol)
@@ -171,11 +189,12 @@ def update(client, now):
             print("::warning::VN30 EOD missing for " + official + ": " + ",".join(missing), flush=True)
         if now.weekday() < 5 and now.hour >= 16 and official < end.isoformat():
             print(f"::warning::SSI VNINDEX has not published EOD for {end}; last available {official}.", flush=True)
-    from scripts.update_market_archive import update as update_archive
-    update_archive(client, min(end, date.fromisoformat(official)) if official else end, directory, providers, backfill)
+    if not index_only:
+        from scripts.update_market_archive import update as update_archive
+        update_archive(client, min(end, date.fromisoformat(official)) if official else end, directory, providers, backfill)
     if failures:
         raise ValueError("Failed SSI series: " + ",".join(failures))
-    if not any(symbol in series for symbol in symbols):
+    if not index_only and not any(symbol in series for symbol in symbols):
         raise ValueError("No equity history available")
 
 

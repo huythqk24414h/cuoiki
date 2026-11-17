@@ -162,8 +162,9 @@ window.StaticLiquidity = (() => {
     const count={'1D':1,'5D':5,'1W':5,'1M':22,'3M':66,'6M':132,'1Y':264,'3Y':792,'5Y':1320}[filter];
     if(count) rows=rows.slice(-count);
     if(filter==='YTD'&&rows.length) rows=rows.filter(row=>row.date.slice(0,4)===rows.at(-1).date.slice(0,4));
-    if(path==='index') return {source:'SSI FastConnect V3',rows:rows.map(row=>({
-      tradingDate:row.date,indexValue:row.close_vnd,indexChangePercentage:row.return_pct}))};
+    if(path==='index') return {source:'SSI FastConnect V3',revision:version,rows:rows.map(row=>({
+      tradingDate:row.date,indexValue:row.close_vnd,indexChangePercentage:row.return_pct,
+      open:row.open_vnd,high:row.high_vnd,low:row.low_vnd}))};
     const resolution=q.get('resolution')||'1D', summary=rows.at(-1);
     const omitted=data.symbols[symbol]?.quarantined_dates?.length || 0;
     return {available:true,rows:aggregate(rows,resolution),summary,resolution,

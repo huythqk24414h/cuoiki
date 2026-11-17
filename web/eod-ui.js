@@ -41,65 +41,61 @@
       q('#method-provenance').replaceChildren(node('dt','Phạm vi SSI hiện tại'),node('dd',`${data.scope}: ${data.catalog_count} mục, ${data.loaded_symbols} có lịch sử; ${data.sessions} phiên, ${data.first}–${data.last}`),node('dt','Độ phủ theo phiên'),node('dd',note),node('dt','Đơn vị / điều chỉnh'),node('dd','Source native; đơn vị mở rộng và chính sách điều chỉnh chưa xác minh đầy đủ. Không xuất turnover thực.'));
     }catch(e){text('#coverage-badge','BLOCKED · Không kiểm chứng được độ phủ: '+e.message);}
   }
-  const indexMode = node('select');
+
+  const indexMode = ChartKit.frameSelect();
   const indexModeLabel = node('label','Khung chỉ số ');
-  for (const [value,label] of [['15m','15 phút'],['eod','Lịch sử EOD']]) {
-    const option = node('option',label);
-    option.value=value;indexMode.append(option);
+  if(!window.StaticLiquidity){
+    for(const option of [...indexMode.options])if(ChartKit.intradayFrame(option.value))option.remove();
+    indexMode.value='1D';
   }
   indexModeLabel.append(indexMode);
-  indexModeLabel.hidden=true;
-  q('#index-status').before(indexModeLabel);
-  let indexRequest=0,indexBusy=false,indexChart,indexVersion;
+  const indexControls=node('div',null,'chart-filters');
+  const indexSelector=q('#index-select');
+  const indexLabel=indexSelector.closest('label');
+  indexLabel.before(indexControls);
+  indexControls.append(indexLabel,indexModeLabel);
+  let indexRequest=0,indexBusy=false,indexVersion,indexKey;
   async function loadIndex(force=true){
-    const s=window.MarketState.value,code=q('#index-select').value;
+    const s=window.MarketState.value,code=indexSelector.value;
     if(!code || (!force && indexBusy))return;
-    const canShowIntraday=window.StaticLiquidity && ['VNINDEX','VN30','HNXINDEX','UPCOMINDEX'].includes(code);
-    indexModeLabel.hidden=!canShowIntraday;
+    const frame=indexMode.value,intraday=ChartKit.intradayFrame(frame);
+    const query=new URLSearchParams(intraday?{symbol:code,resolution:ChartKit.sourceFrame(frame)}:
+      {symbol:code,range:ChartKit.historyRange(s.range,frame),to:s.to,...(s.range==='CUSTOM'&&s.from?{from:s.from}:{})});
     const target=q('#index-chart');
     const ticket=++indexRequest;
+    const key=frame+':'+query;
+    if(key!==indexKey){
+      ChartKit.destroy(target);indexVersion=undefined;indexKey=key;
+      text('#index-status',code+' · Đang tải dữ liệu SSI…');
+    }
     indexBusy=true;
     try{
-      if(canShowIntraday&&indexMode.value==='15m'){
-        const result=await request('/api/market/intraday?'+new URLSearchParams({symbol:code,resolution:'15m'}));
-        if(ticket!==indexRequest)return;
-        const rows=result.rows;
-        if(!rows.length){
-          if(indexChart){indexChart.dispose();indexChart=null;indexVersion=undefined;}
-          target.replaceChildren();
-          text('#index-status',code+' · Chưa có nến SSI 15 phút. Có thể chọn Lịch sử EOD.');
-          return;
-        }
-        const latest=rows.at(-1), day=latest.closed_at.slice(0,10);
-        text('#index-status',`${code} · ${fmt(latest.close)} điểm · Nến SSI 15 phút đóng ${latest.closed_at.slice(0,16).replace('T',' ')} ICT`);
-        if(!indexChart){target.replaceChildren();indexChart=echarts.init(target);}
-        const version = code+':'+latest.closed_at+':'+result.retrieved_at;
-        if(indexVersion===version && !force)return;
-        indexVersion=version;
-        const sameDay=rows.filter(row=>row.timestamp.startsWith(day));
-        indexChart.setOption({animation:false,tooltip:{trigger:'axis'},grid:{left:68,right:25,top:22,bottom:48},
-          xAxis:{type:'category',data:sameDay.map(row=>row.closed_at.slice(11,16))},
-          yAxis:{type:'value',scale:true,name:'Điểm'},
-          series:[{name:code,type:'line',data:sameDay.map(row=>Number(row.close)),showSymbol:true}]});
-        indexChart.resize();
-        return;
-      }
-      if(indexChart){indexChart.dispose();indexChart=null;indexVersion=undefined;}
-      const data=await request('/api/market/index?'+new URLSearchParams({symbol:code,range:s.range,to:s.to,...(s.range==='CUSTOM'&&s.from?{from:s.from}:{})}));
+      const data=await request('/api/market/'+(intraday?'intraday':'index')+'?'+query);
       if(ticket!==indexRequest)return;
-      text('#index-status',`${code} · ${data.rows.length} phiên chính thức · ${data.source||'SSI indexSummary'} · ${data.rows.at(-1)?.tradingDate||'chưa có dữ liệu'}`);
-      const valid=data.rows.filter(r=>r.indexValue!=null&&Number.isFinite(Number(r.indexValue))&&Number(r.indexValue)>0);
-      target.replaceChildren();
-      if(!valid.length){target.append(node('p',data.reason||'Không có giá trị chỉ số đã kiểm chứng trong khoảng.'));return;}
-      const last=valid.at(-1);text('#index-status',`${code}: ${fmt(last.indexValue)} điểm · thay đổi ${fmt(last.indexChange)} điểm / ${fmt(last.indexChangePercentage)}% · ${last.tradingDate} · ${data.source||'SSI indexSummary'}`);
-      chart('#index-chart','index_value',code,'điểm',{data:valid.map(r=>({date:r.tradingDate.slice(0,10).replaceAll('/','-'),symbol:code,index_value:r.indexValue,volume_shares:null})),source:data.source||'SSI indexSummary'});
-    }catch(e){if(ticket===indexRequest)text('#index-status',code+' · Chưa cập nhật được dữ liệu SSI: '+e.message);}
-    finally{if(ticket===indexRequest)indexBusy=false;}
+      const rows=intraday?ChartKit.intradayRows(data.rows||[],frame,code):ChartKit.dailyRows(
+        (data.rows||[]).filter(r=>Number(r.indexValue)>0).map(r=>({
+          date:r.tradingDate.slice(0,10).replaceAll('/','-'),symbol:code,close_vnd:r.indexValue,
+          open_vnd:r.open,high_vnd:r.high,low_vnd:r.low,
+        })),frame);
+      const last=rows.at(-1);
+      if(!last){
+        ChartKit.destroy(target);indexVersion=undefined;
+        text('#index-status',code+' · Chưa có dữ liệu SSI cho khung này.');return;
+      }
+      const date=intraday?new Date(last.closed_at||last.date).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}):last.date;
+      const source=intraday?'SSI trong phiên':'SSI EOD';
+      text('#index-status',[code,fmt(last.close_vnd)+' điểm',source,date].join(' · '));
+      const version=[key,rows.length,last.date,last.close_vnd,data.retrieved_at,data.revision].join(':');
+      if(indexVersion===version&&!force)return;
+      ChartKit.render(target,rows,'close_vnd','Chỉ số','điểm',{financial:true,intraday,source,volumePane:false,defaultType:'line'});
+      indexVersion=version;
+    }catch(error){
+      if(ticket===indexRequest)text('#index-status',code+' · Chưa cập nhật được dữ liệu SSI: '+error.message);
+    }finally{if(ticket===indexRequest)indexBusy=false;}
   }
-  indexMode.addEventListener('change',()=>{if(indexMode.value==='15m')q('#index-chart').replaceChildren();loadIndex();});
+  indexMode.addEventListener('change',()=>loadIndex());
   setInterval(()=>{
-    if(window.StaticLiquidity&&!document.hidden&&['','#monitor'].includes(location.hash)&&
-       !indexModeLabel.hidden&&indexMode.value==='15m')loadIndex(false);
+    if(window.StaticLiquidity&&!document.hidden&&!document.body.classList.contains('guest')&&['','#monitor'].includes(location.hash))loadIndex(false);
   },60000);
   window.addEventListener('hashchange',syncToolbar);
   window.addEventListener('market-state-change',()=>{
@@ -288,7 +284,7 @@
     target.append(frame,tooltip,node('p',`${rows[0]?.symbol||state.symbol} · ${label} (${unit}) · ${options.source||'SSI FastConnect V3'} · ${rows[0]?.date||'—'}–${rows.at(-1)?.date||'—'}`,'helper'));
   }
   function renderCharts() {
-    chart('#price-chart','close_vnd','Giá đóng cửa','đơn vị giá nguồn',{main:true});
+    if(!q('#price-chart').hidden)chart('#price-chart','close_vnd','Giá đóng cửa','đơn vị giá nguồn',{main:true});
     chart('#volume-trend-chart','volume_shares',state.resolution==='1D'?'Khối lượng phiên & TB20 trước':'Khối lượng tổng hợp (không so với TB20 ngày)','đơn vị KL nguồn',{bars:true,volumeComparison:state.resolution==='1D'});
     chart('#relative-chart','relative_volume20','Khối lượng tương đối','lần');
     chart('#volatility-chart','volatility20_pct','Volatility20','%');

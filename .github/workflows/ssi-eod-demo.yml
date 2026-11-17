@@ -1,5 +1,8 @@
 name: SSI Market History
 on:
+  push:
+    branches: [main]
+    paths: ['scripts/publish_market_history.py']
   workflow_dispatch:
     inputs:
       full_backfill:
@@ -25,6 +28,7 @@ jobs:
     timeout-minutes: 120
     env:
       SSI_FULL_BACKFILL: ${{ inputs.full_backfill || false }}
+      SSI_EOD_INDEX_ONLY: ${{ github.event_name == 'push' }}
       SSI_EOD_SYMBOLS: ${{ vars.SSI_EOD_SYMBOLS || 'VN30' }}
       SSI_EOD_BACKFILL_BATCH: ${{ inputs.batch_size || vars.SSI_EOD_BACKFILL_BATCH || 8 }}
       SSI_API_KEY: ${{ secrets.SSI_API_KEY }}

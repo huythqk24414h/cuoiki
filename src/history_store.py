@@ -52,6 +52,7 @@ def index_data(code):
     for r in saved['rows']:
         close=Decimal(r['close_vnd']);change=close-previous if previous else None
         result.append({'tradingDate':r['date'].replace('-','/'),'indexValue':str(close),
+                       'open':r.get('open_vnd'),'high':r.get('high_vnd'),'low':r.get('low_vnd'),
                        'indexChange':str(change) if change is not None else None,
                        'indexChangePercentage':str(change/previous*100) if change is not None else None})
         previous=close
