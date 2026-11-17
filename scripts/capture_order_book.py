@@ -5,6 +5,7 @@ import os
 import re
 import time
 from datetime import datetime, time as clock_time, timedelta
+from decimal import Decimal, InvalidOperation
 from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -12,6 +13,16 @@ from pathlib import Path
 from src.ssi_stream import DataStream, VN
 from scripts.market_store import archive_book, publish, redis
 from src.ssi_client import SSIReadonly
+
+
+def full_book(quote):
+    try:
+        return all(len(quote[side]) >= 3 and all(
+            value.is_finite() and value > 0 for level in quote[side][:3]
+            for value in map(lambda item: Decimal(str(item)), level)
+        ) for side in ("bids", "asks"))
+    except (InvalidOperation, TypeError):
+        return False
 
 
 def main():
@@ -109,6 +120,7 @@ def capture_session(symbols, day, opens, deadline, session):
                     quotes = {symbol: stream.quotes.get(symbol) for symbol in symbols}
                     state, epoch = stream.state, stream.connection_epoch
                     trades = {symbol: stream.trades.get(symbol) for symbol in symbols}
+                    rooms = {symbol: stream.rooms.get(symbol) for symbol in symbols}
                 website_rows = []
                 for symbol, quote in quotes.items():
                     status = "no_quote"
@@ -128,7 +140,7 @@ def capture_session(symbols, day, opens, deadline, session):
                                         flag_time.date() == sampled.date() and event >= flag_time)
                             status = "fresh_two_sided_quote" if verified else "session_unverified"
                             counts[symbol] += 1
-                            if publish_live:
+                            if publish_live and full_book(quote):
                                 entry = {
                                     "bids": quote["bids"], "asks": quote["asks"],
                                     "quote_time": quote["event_time"], "received_at": quote["received_at"],
@@ -138,6 +150,8 @@ def capture_session(symbols, day, opens, deadline, session):
                     observed[status] += 1
                     trade = trades[symbol] or {}
                     trade_data = trade.get("data", {})
+                    room = rooms[symbol] or {}
+                    room_data = room.get("data", {})
                     points = recent[symbol]
                     event_time = trade.get("event_time")
                     price = trade_data.get("p")
@@ -148,6 +162,9 @@ def capture_session(symbols, day, opens, deadline, session):
                         "metrics":stream.book(symbol) if publish_live and status == "fresh_two_sided_quote" else None,
                         "quote_time":quote["event_time"] if quote else None,
                         "trade_time":trade.get("event_time"),
+                        "room_time":room.get("event_time"),
+                        "foreign_buy":room_data.get("bq"),"foreign_sell":room_data.get("sq"),
+                        "foreign_room":room_data.get("cr"),
                         "bids":quote["bids"] if levels else [],
                         "asks":quote["asks"] if levels else [],
                         "last_price":trade_data.get("p"),

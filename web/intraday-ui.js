@@ -83,7 +83,7 @@
  window.addEventListener('market-state-change',()=>refreshOverview(true));
  window.addEventListener('hashchange',()=>refreshOverview(true));
  window.addEventListener('resize',()=>{if(!overviewPane.hidden)overviewChart?.resize();});
- setInterval(refreshOverview,10000);
+ setInterval(refreshOverview,window.StaticLiquidity?60000:5000);
  switchOverview();
  async function update(){
   if(busy||document.hidden||document.body.classList.contains('guest'))return;
@@ -112,5 +112,5 @@
    }
   }catch(e){(page==='analysis'?status:ws).textContent='Chưa đọc được dữ liệu: '+e.message;}finally{busy=false;}
  }
- select.addEventListener('change',update);window.addEventListener('hashchange',update);window.addEventListener('market-state-change',update);window.addEventListener('resize',()=>chart?.resize());setInterval(update,5000);update();
+ select.addEventListener('change',update);window.addEventListener('hashchange',update);window.addEventListener('market-state-change',update);window.addEventListener('resize',()=>chart?.resize());setInterval(update,window.StaticLiquidity?60000:5000);update();
 })();

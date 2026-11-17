@@ -6,6 +6,7 @@
   const fmt=(value,digits=2)=>value==null?'—':calculator.formatDecimal(String(value),digits);
   const el=(tag,value)=>{const n=document.createElement(tag);if(value!=null)n.textContent=value;return n;};
   let manualMode=false;
+  let renderedBookSymbol;
   let manual=null, alerts=[], page=1, bookRevision=0, alertRevision=0, alertSummary='Chưa đánh giá',alertHash=null;
   const quality=el('details');quality.className='data-quality';const qualityTitle=el('summary','Chất lượng dữ liệu & kết nối');quality.append(qualityTitle);
   for(const id of ['global-source','global-context','universe-note','coverage-badge','header-source-time']){const item=q('#'+id);if(item)quality.append(item);}
@@ -33,6 +34,8 @@
     }catch(error){if(ticket===evidenceRevision)explanation.replaceChildren(el('p','Không đọc được bằng chứng: '+error.message));}
   }
   function blankBook(message){
+    q('#book-bid').nextElementSibling.textContent='VND';
+    q('#book-ask').nextElementSibling.textContent='VND';
     for(const key of ['bid','ask','spread','imbalance'])q('#book-'+key).textContent='—';
     q('#book-levels').replaceChildren();
     for(let i=1;i<=3;i++){const row=el('tr');[i,'—','—','—','—'].forEach(v=>row.append(el('td',v)));q('#book-levels').append(row);}
@@ -43,14 +46,29 @@
     manualMode=false;
     const id=++bookRevision;
     q('#book-refresh').disabled=true;
-    if(quiet!==true)blankBook('Đang kiểm tra trạng thái SSI DATA…');
+    const symbol=q('#book-symbol').value;
+    if(renderedBookSymbol!==symbol){
+      renderedBookSymbol=null;
+      blankBook('Đang kiểm tra trạng thái SSI DATA…');
+    }
     try{
-      const data=await request('/api/market/book?symbol='+encodeURIComponent(q('#book-symbol').value));
+      const data=await request('/api/market/book?symbol='+encodeURIComponent(symbol));
       if(id!==bookRevision)return;
+      if(renderedBookSymbol===symbol&&!data.available&&!data.unverified_levels){
+        q('#book-status').textContent='Giữ bản chụp trên màn hình. '+(data.reason||'Chưa có báo giá mới.');
+        return;
+      }
       if(data.available){drawBook({payload:data,result:data},'SSI DATA · LIVE');}
       else{
         blankBook(data.reason || 'Chưa có snapshot SSI DATA đủ điều kiện.');q('#book-caption').textContent=`${data.symbol} · ${data.status} · không phải LIVE`;
         if(data.unverified_levels){
+          renderedBookSymbol=symbol;
+          const m=data.snapshot_metrics;
+          if(m){
+            for(const [name,value,digits] of [['bid',m.bid,2],['ask',m.ask,2],['spread',m.spread_bps,4],['imbalance',m.imbalance,6]])
+              q('#book-'+name).textContent=fmt(value,digits);
+            for(const side of ['bid','ask'])q('#book-'+side).nextElementSibling.textContent='Giá nguồn × KL nguồn';
+          }
           q('#book-caption').textContent=`SSI DATA · ${data.symbol} · ${data.status} · số theo SDK, chưa xác minh đơn vị giá/KL`;
           q('#book-bid-label').textContent='Giá mua (nguồn)';q('#book-ask-label').textContent='Giá bán (nguồn)';
           q('#book-bid-qty').textContent='KL mua (nguồn)';q('#book-ask-qty').textContent='KL bán (nguồn)';
@@ -64,13 +82,18 @@
           }
         }
       }
-    }catch(error){if(id===bookRevision)blankBook('Không đọc được sổ lệnh SSI: '+error.message);}
+    }catch(error){if(id===bookRevision){
+      if(renderedBookSymbol===symbol)q('#book-status').textContent='Giữ bản chụp đã hiển thị. '+error.message;
+      else blankBook('Không đọc được sổ lệnh SSI: '+error.message);
+    }}
     finally{if(id===bookRevision)q('#book-refresh').disabled=false;}
   }
   function drawBook(view,label){
     manualMode=label==='MANUAL';
     ++bookRevision;q('#book-refresh').disabled=false;
     const {payload,result}=view;
+    renderedBookSymbol=manualMode?null:payload.symbol;
+    for(const side of ['bid','ask'])q('#book-'+side).nextElementSibling.textContent='VND';
     q('#book-bid-label').textContent='Giá mua (VND)';q('#book-ask-label').textContent='Giá bán (VND)';
     q('#book-bid-qty').textContent='KL mua (cp)';q('#book-ask-qty').textContent='KL bán (cp)';
     q('#book-status').textContent=`${label} · ${payload.symbol} · ${label==='MANUAL'?'Đầu vào người dùng, không phải SSI/live.':'Quote đủ điều kiện tính chỉ báo.'}`;
@@ -98,6 +121,7 @@
   q('#book-symbol').addEventListener('change',loadBook);q('#book-refresh').addEventListener('click',loadBook);
   window.addEventListener('hashchange',()=>{if(location.hash==='#book'){if(manualMode&&manual)drawBook(manual,'MANUAL');else loadBook();}});
   const overviewBook=q('.book-card');
+  let overviewSymbol;
   let overviewBusy=false;
   async function loadOverviewBook(){
     if(document.hidden||document.body.classList.contains('guest')||overviewBusy||!['','#monitor'].includes(location.hash))return;
@@ -111,16 +135,23 @@
       const raw=data.unverified_levels;
       const bids=data.available?data.bids?.map(r=>[r.price,r.quantity]):raw?.bids;
       const asks=data.available?data.asks?.map(r=>[r.price,r.quantity]):raw?.asks;
+      if(overviewSymbol===symbol&&!bids?.length&&!asks?.length){
+        helper.textContent='Giữ bản chụp đã hiển thị. Đang chờ báo giá mới.';
+        return;
+      }
       const stamp=data.event_time?new Date(data.event_time).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}):'';
       caption.textContent=[symbol,'SSI DATA',data.available?'Trong phiên':data.status,stamp].filter(Boolean).join(' · ');
       helper.textContent=data.reason||(raw?'Giá và khối lượng theo đơn vị nguồn SSI.':'Xem thời gian báo giá SSI.');
       const cells=overviewBook.querySelectorAll('tbody td');
       for(let i=0;i<3;i++) [bids?.[i]?.[0],bids?.[i]?.[1],asks?.[i]?.[0],asks?.[i]?.[1]]
         .forEach((value,j)=>{cells[i*4+j].textContent=value??'—';});
+      overviewSymbol=bids?.length&&asks?.length?symbol:null;
     }catch{
+      if(overviewSymbol===symbol){helper.textContent='Giữ bản chụp đã hiển thị. Kho SSI tạm thời không phản hồi.';return;}
       caption.textContent=symbol+' · Sổ lệnh SSI tạm thời không đọc được';
       helper.textContent='Đang chờ kết nối kho dữ liệu.';
       overviewBook.querySelectorAll('tbody td').forEach(cell=>{cell.textContent='—';});
+      overviewSymbol=null;
     }finally{overviewBusy=false;}
   }
   window.addEventListener('market-state-change',loadOverviewBook);

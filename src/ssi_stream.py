@@ -78,7 +78,7 @@ class DataStream:
         self.pending=queue.Queue(maxsize=10000);self.persisted=0;self.dropped=0
         self.rest_last_attempt=None;self.rest_fallback={'status':'not_needed','mode':'REST_DELAYED','interval_seconds':900}
         self.watch_groups={'book':set(self.wanted),'board':set()};self.board_lease_until=0
-        self.trades={};self.masters={};self.flags={};self.trade_count=0;self.master_count=0
+        self.trades={};self.masters={};self.rooms={};self.flags={};self.trade_count=0;self.master_count=0
         # Deliberately not configured from price magnitude or an EOD bar.
         # A verified live schema/unit investigation must set this, not a UI toggle.
         self.verified_price_scale=None
@@ -125,8 +125,11 @@ class DataStream:
         topic=str(frame.get('topic','')).lower();data=frame.get('data')
         if not isinstance(data,dict):return
         now=datetime.now(VN).isoformat()
-        fields=('b','t','f') if topic=='market.flag' else ('s','t','bids','asks') if topic.startswith('quote.') else ('s','t','p','q','v','o','h','l','a','si') if topic.startswith('trade.') else ('s','b','t','ce','fl','ref')
-        if not (topic=='market.flag' or topic.startswith(('quote.','trade.','market.'))):return
+        if topic.startswith('room.'):
+            fields=('s','t','tr','cr','bq','sq')
+        else:
+            fields=('b','t','f') if topic=='market.flag' else ('s','t','bids','asks') if topic.startswith('quote.') else ('s','t','p','q','v','o','h','l','a','si') if topic.startswith('trade.') else ('s','b','t','ce','fl','ref')
+        if not topic.startswith(('quote.','trade.','market.','room.')):return
         with self.lock:
             self.raw_sequence+=1
             raw_record={'topic':topic,'data':{k:data[k] for k in fields if k in data},'received_at':now,'sequence':self.raw_sequence,'connection_epoch':self.connection_epoch}
@@ -135,20 +138,20 @@ class DataStream:
         if topic=='market.flag':
             from ssi_sdk.models import MarketFlagMessage
             self._data(MarketFlagMessage.from_dict(data))
-        elif topic.startswith(('trade.','market.')):
+        elif topic.startswith(('trade.','market.','room.')):
             symbol=data.get('s')
             with self.lock:
                 if symbol not in self.active_symbols:return
                 try:event=datetime.strptime(data['t'],'%Y/%m/%d %H:%M:%S').replace(tzinfo=VN).isoformat()
                 except (KeyError,TypeError,ValueError):return
-                record={'symbol':symbol,'event_time':event,'received_at':now,'data':{k:data[k] for k in (('s','t','p','q','v','o','h','l','a','si') if topic.startswith('trade.') else ('s','b','t','ce','fl','ref')) if k in data}}
-                store=self.trades if topic.startswith('trade.') else self.masters
+                record={'symbol':symbol,'event_time':event,'received_at':now,'data':raw_record['data']}
+                store=self.trades if topic.startswith('trade.') else self.rooms if topic.startswith('room.') else self.masters
                 previous=store.get(symbol)
                 if previous and event<previous['event_time']:return
                 store[symbol]=record
                 if topic.startswith('trade.'):
                     self.trade_count+=1;self.last_event=now;self.state='connected_unverified'
-                else:self.master_count+=1
+                elif topic.startswith('market.'):self.master_count+=1
             return
         elif topic.startswith('quote.'):
             symbol=data.get('s')
@@ -187,7 +190,7 @@ class DataStream:
             try:self.pending.put_nowait({'topic':'collector.connection','received_at':datetime.now(VN).isoformat(),'data':{'state':event.state},'connection_epoch':self.connection_epoch})
             except queue.Full:self.dropped+=1
             self.quotes.clear();self.flag=None;self.flag_time=None
-            self.trades.clear();self.masters.clear();self.flags.clear()
+            self.trades.clear();self.masters.clear();self.rooms.clear();self.flags.clear()
             if event.state in ('connected','reconnected'):self.next_retry_at=None
             self.subscription_status={};self.error=None
 
@@ -281,12 +284,15 @@ class DataStream:
                     with self.lock:wanted=self._wanted_now()
                     remove=subscribed-wanted;add=wanted-subscribed
                     if remove:
-                        self.ws.unsubscribe_symbol_quote(sorted(remove));self.ws.unsubscribe_symbol_trade(sorted(remove));self.ws.unsubscribe_market(sorted(remove))
+                        self.ws.unsubscribe_symbol_quote(sorted(remove));self.ws.unsubscribe_symbol_trade(sorted(remove));self.ws.unsubscribe_symbol_room(sorted(remove));self.ws.unsubscribe_market(sorted(remove))
                     subscribed-=remove
                     for symbol in sorted(add):
                         if time.monotonic()<retry_at.get(symbol,0):continue
                         try:
-                            self.ws.subscribe_symbol_quote([symbol]);self.ws.subscribe_symbol_trade([symbol]);self.ws.subscribe_market([symbol])
+                            self.ws.subscribe_symbol_quote([symbol])
+                            self.ws.subscribe_symbol_trade([symbol],on_response=lambda frame:self._ack('trade',frame))
+                            self.ws.subscribe_symbol_room([symbol],on_response=lambda frame:self._ack('room',frame))
+                            self.ws.subscribe_market([symbol])
                             subscribed.add(symbol);retry_at.pop(symbol,None)
                         except Exception as error:
                             with self.lock:self.error=safe_error(error)

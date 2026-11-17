@@ -6,7 +6,7 @@ module.exports = async function (req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') return res.status(405).json({error:'Method not allowed'});
   const {kind, symbol, resolution, board, q, page, size} = req.query;
-  if (!['history','series','live','intraday','catalog','market-delta','book-checkpoints'].includes(kind))
+  if (!['history','series','live','intraday','catalog','market-delta','book-checkpoints','board-summary'].includes(kind))
     return res.status(400).json({error:'Unknown dataset'});
   if ((kind === 'series' || kind === 'market-delta' || (['intraday','live'].includes(kind) && symbol !== undefined)) &&
       (typeof symbol !== 'string' || !symbolPattern.test(symbol)))
@@ -113,7 +113,7 @@ module.exports = async function (req, res) {
       }
     } else data = await read(kind);
     if (!data) return res.status(404).json({error:'No published data yet'});
-    if (['catalog','history','series','intraday'].includes(kind))
+    if (['catalog','history','series','intraday','board-summary'].includes(kind))
       res.setHeader('Cache-Control','public, max-age=0, s-maxage=30');
     return res.status(200).json(data);
   } catch {

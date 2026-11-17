@@ -58,7 +58,7 @@ test('catalog pagination, coverage, missing symbol, and Redis failure', async (t
 
 test('production board keeps the last two-sided quote across missing and older snapshots', async () => {
   const time = new Date().toISOString();
-  const original = {symbol:'ACB',quote_time:time,bids:[[20,100]],asks:[[21,200]]};
+  const original = {symbol:'ACB',quote_time:time,bids:[[20,100],[19,100],[18,100]],asks:[[21,200],[22,200],[23,200]]};
   let snapshot = {updated_at:time,rows:[original]};
   const window = {};
   runInNewContext(readFileSync(require.resolve('../demo/static-api.js'),'utf8'),{
@@ -69,7 +69,7 @@ test('production board keeps the last two-sided quote across missing and older s
   });
   const read=()=>window.StaticLiquidity.request(new URL('https://example.test/api/market/board?mode=DATA'));
   assert.equal((await read()).rows[0].bids[0].price,20);
-  snapshot={updated_at:time,rows:[{symbol:'ACB',bids:[],asks:[]}],last_books:{
+  snapshot={updated_at:time,rows:[{...original,bids:[[20,999],[19,100]]}],last_books:{
     ACB:{...original,quote_time:'2026-11-16T11:00:00+07:00',bids:[[19,90]]},
   }};
   const saved=(await read()).rows[0];

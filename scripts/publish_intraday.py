@@ -4,7 +4,8 @@ import time
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from scripts.market_store import publish
+import json
+from scripts.market_store import publish, redis
 from scripts.market_universe import BASE_INTRADAY, report_requests, request, select_symbols, stored
 from src.intraday import aggregate, normalize
 from src.ssi_client import SSIReadonly, safe_error
@@ -12,6 +13,12 @@ from src.ssi_stream import VN
 
 WINDOWS = ((555, 690), (780, 870))
 RESOLUTIONS = {"15m":15, "1h":60, "4h":240}
+ADDITIONAL_INDEXES = {"VN30":"VN30", "HNXINDEX":"HNXINDEX", "UPCOMINDEX":"HNXUPCOMINDEX"}
+SUMMARY_FIELDS = {
+    "last_price":"close", "total_volume":"totalMatch", "high":"high", "low":"low",
+    "foreign_buy":"totalForeignBuy", "foreign_sell":"totalForeignSell", "foreign_room":"remainForeignRoom",
+    "change":"priceChange", "change_pct":"priceChangePercentage",
+}
 
 
 def closed_candles(rows, resolution, now):
@@ -69,6 +76,69 @@ def merge_candles(previous, recent, cutoff):
                 merged[key] = row
         result[resolution] = [merged[key] for key in sorted(merged)]
     return result
+
+
+def update_indexes_and_board(client, now):
+    day = now.date().isoformat()
+    provider_day = now.strftime("%Y/%m/%d")
+    try:
+        summary = request(client.get, "/api/v3/data/securitiesSummary",
+                          {"index":"VN30", "from":provider_day, "to":provider_day,
+                           "pageIndex":1, "pageSize":100})
+        items = summary.get("data") if isinstance(summary, dict) else summary
+    except Exception as error:
+        print(f"SSI securitiesSummary unavailable: {safe_error(error)}", flush=True)
+        items = []
+    rows = {}
+    for row in items or []:
+        symbol = row.get("symbol")
+        if not symbol or str(row.get("tradingDate"))[:10].replace("/", "-") != day:
+            continue
+        rows[symbol] = {key:row[field] for key, field in SUMMARY_FIELDS.items()
+                        if row.get(field) not in (None, "")}
+    print(f"SSI securitiesSummary {day}: {len(rows)} symbols", flush=True)
+    catalog = stored("catalog", {})
+    members = catalog.get("index_memberships", {}).get("VN30", [])
+    if members:
+        raw_series = redis(["MGET", *("liquiditylab:intraday:"+symbol for symbol in members)])
+        for symbol, raw in zip(members, raw_series):
+            candles = json.loads(raw or "{}").get("candles", {}).get("15m", [])
+            today = [row for row in candles if row["timestamp"].startswith(day)]
+            if not today:
+                continue
+            record = rows.setdefault(symbol, {})
+            record.update(observed_volume=str(sum(Decimal(bar["volume"]) for bar in today)),
+                          observed_high=str(max(Decimal(bar["high"]) for bar in today)),
+                          observed_low=str(min(Decimal(bar["low"]) for bar in today)),
+                          candle_time=today[-1]["closed_at"])
+    previous_summary = stored("board-summary", {})
+    if previous_summary.get("date") == day:
+        rows = {symbol:{**previous_summary.get("rows", {}).get(symbol, {}), **rows.get(symbol, {})}
+                for symbol in previous_summary.get("rows", {}).keys() | rows.keys()}
+    if rows:
+        publish("board-summary", {"date":day, "retrieved_at":now.isoformat(), "rows":rows})
+    failures = []
+    for symbol, provider in ADDITIONAL_INDEXES.items():
+        try:
+            previous = stored("intraday:"+symbol, {})
+            candles = previous.get("candles", {})
+            first = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            minutes = fetch_minutes(client, provider, first, now)
+            recent = {key:closed_candles(minutes, key, now) for key in RESOLUTIONS}
+            if recent["15m"]:
+                cutoff = (now - timedelta(days=24)).date().isoformat()
+                merged = merge_candles(candles, recent, cutoff)
+                if candles != merged:
+                    publish("intraday:"+symbol, {"source":"SSI FastConnect V3 1m OHLCV",
+                                                 "updated_at":now.isoformat(), "candles":merged})
+                print(f"{symbol}: latest closed {merged['15m'][-1]['closed_at']}", flush=True)
+            else:
+                print(f"{symbol}: SSI returned no closed 15-minute candles for {day}", flush=True)
+        except Exception as error:
+            print(f"{symbol}: not updated ({safe_error(error)})", flush=True)
+            failures.append(symbol)
+    if failures:
+        raise ValueError("Failed SSI index series: " + ",".join(failures))
 
 
 def update(client, now):
@@ -142,7 +212,8 @@ def main():
     try:
         client = SSIReadonly()
         client.authenticate()
-        update(client, datetime.now(VN))
+        updater = update_indexes_and_board if os.getenv("SSI_INTRADAY_INDEX_BOARD") == "true" else update
+        updater(client, datetime.now(VN))
     except Exception as error:
         diagnostic = str(error) if isinstance(error, ValueError) else safe_error(error)
         raise SystemExit(f"SSI intraday refresh failed: {diagnostic}") from None

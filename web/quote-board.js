@@ -45,7 +45,7 @@
     if(previous&&previous[i]!==value&&value!=null&&i!==4&&i<27&&Number.isFinite(Number(value))&&Number.isFinite(Number(previous[i]))&&previous[i]!=null){const direction=Number(value)>Number(previous[i])?'flash-up':'flash-down';cell.classList.remove('flash-up','flash-down');cell.classList.add(direction);setTimeout(()=>cell.classList.remove(direction),300);}
     for(const c of ['market-up','market-down','market-reference','market-ceiling','market-floor'])cell.classList.toggle(c,colors[i]===c&&value!=null);
     cell.classList.toggle('price-missing',value==null);
-    cell.title=i===4?`Cờ SSI: ${row.session_time||'chưa nhận'}; không suy ra phiên từ giờ máy`:i>=11&&i<=14?`Khớp: ${labels[row.trade_status]||row.trade_status} · ${row.trade_time||'chưa nhận'}. ${i>=13?row.change_reason:''}`:i>=24&&i<=26?'Chưa có dữ liệu khối ngoại/room được kiểm chứng cho bảng này.':row.reason||'';
+    cell.title=i===4?`Mốc nguồn SSI: ${row.session_time||'chưa nhận'}`:i>=11&&i<=12?`Bản tin khớp SSI · ${row.trade_time||'chưa nhận'}`:i>=13&&i<=14||i>=21&&i<=26?(row.summary_note||row.reason||'Chờ dữ liệu SSI.'):row.reason||'';
    });
    lastValues.set(row.symbol,fields);if(body.children[rowIndex]!==tr)body.insertBefore(tr,body.children[rowIndex]||null);
   }

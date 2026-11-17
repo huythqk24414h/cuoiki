@@ -54,30 +54,33 @@
   async function loadIndex(force=true){
     const s=window.MarketState.value,code=q('#index-select').value;
     if(!code || (!force && indexBusy))return;
-    const canShowIntraday=window.StaticLiquidity && code==='VNINDEX';
+    const canShowIntraday=window.StaticLiquidity && ['VNINDEX','VN30','HNXINDEX','UPCOMINDEX'].includes(code);
     indexModeLabel.hidden=!canShowIntraday;
     const target=q('#index-chart');
     const ticket=++indexRequest;
     indexBusy=true;
     try{
       if(canShowIntraday&&indexMode.value==='15m'){
-        const result=await request('/api/market/intraday?symbol=VNINDEX&resolution=15m');
+        const result=await request('/api/market/intraday?'+new URLSearchParams({symbol:code,resolution:'15m'}));
         if(ticket!==indexRequest)return;
         const rows=result.rows;
         if(!rows.length){
-          text('#index-status','VNINDEX · Chưa có nến SSI 15 phút. Có thể chọn Lịch sử EOD.');
+          if(indexChart){indexChart.dispose();indexChart=null;indexVersion=undefined;}
+          target.replaceChildren();
+          text('#index-status',code+' · Chưa có nến SSI 15 phút. Có thể chọn Lịch sử EOD.');
           return;
         }
         const latest=rows.at(-1), day=latest.closed_at.slice(0,10);
-        text('#index-status',`VNINDEX · ${fmt(latest.close)} điểm · Nến SSI 15 phút đóng ${latest.closed_at.slice(0,16).replace('T',' ')} ICT`);
+        text('#index-status',`${code} · ${fmt(latest.close)} điểm · Nến SSI 15 phút đóng ${latest.closed_at.slice(0,16).replace('T',' ')} ICT`);
         if(!indexChart){target.replaceChildren();indexChart=echarts.init(target);}
-        if(indexVersion===result.retrieved_at)return;
-        indexVersion=result.retrieved_at;
+        const version = code+':'+latest.closed_at+':'+result.retrieved_at;
+        if(indexVersion===version && !force)return;
+        indexVersion=version;
         const sameDay=rows.filter(row=>row.timestamp.startsWith(day));
         indexChart.setOption({animation:false,tooltip:{trigger:'axis'},grid:{left:68,right:25,top:22,bottom:48},
           xAxis:{type:'category',data:sameDay.map(row=>row.closed_at.slice(11,16))},
           yAxis:{type:'value',scale:true,name:'Điểm'},
-          series:[{name:'VNINDEX',type:'line',data:sameDay.map(row=>Number(row.close)),showSymbol:true}]});
+          series:[{name:code,type:'line',data:sameDay.map(row=>Number(row.close)),showSymbol:true}]});
         indexChart.resize();
         return;
       }
@@ -96,8 +99,8 @@
   indexMode.addEventListener('change',()=>{if(indexMode.value==='15m')q('#index-chart').replaceChildren();loadIndex();});
   setInterval(()=>{
     if(window.StaticLiquidity&&!document.hidden&&['','#monitor'].includes(location.hash)&&
-       q('#index-select').value==='VNINDEX'&&indexMode.value==='15m')loadIndex(false);
-  },15000);
+       !indexModeLabel.hidden&&indexMode.value==='15m')loadIndex(false);
+  },60000);
   window.addEventListener('hashchange',syncToolbar);
   window.addEventListener('market-state-change',()=>{
     Object.assign(state,window.MarketState.value);syncToolbar();

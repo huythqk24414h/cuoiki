@@ -49,7 +49,7 @@ window.StaticLiquidity = (() => {
   }
   async function load(kind, symbol, resolution) {
     const q = new URLSearchParams({kind,...(symbol ? {symbol} : {}),...(resolution ? {resolution} : {})});
-    const response = await fetch('/api/market-data?'+q,{cache:'no-store'});
+    const response = await fetch('/api/market-data?'+q,kind==='live'?{cache:'no-store'}:{});
     if (response.status === 404) return null;
     if (!response.ok) throw Error('Kho dữ liệu SSI tạm thời không truy cập được.');
     return response.json();
@@ -158,8 +158,40 @@ window.StaticLiquidity = (() => {
   }
 
   const displayedBooks = new Map();
+  let liveRequest;
+  function loadLive() {
+    return liveRequest ??= load('live').finally(()=>{liveRequest=undefined;});
+  }
+  const completeBook = row=>row?.bids?.length>=3 && row?.asks?.length>=3 &&
+    [...row.bids.slice(0,3),...row.asks.slice(0,3)].every(level=>
+      Array.isArray(level) && level.length===2 && level.every(value=>Number.isFinite(Number(value))&&Number(value)>0));
+  function retainedBook(symbol, live, saved) {
+    const previous=displayedBooks.get(symbol);
+    const book=[previous,saved,live].filter(completeBook).sort((a,b)=>Date.parse(b.quote_time)-Date.parse(a.quote_time))[0];
+    if(book)displayedBooks.set(symbol,book);
+    return book;
+  }
+  function sourceMetrics(book) {
+    if(!completeBook(book))return null;
+    const bids=book.bids.slice(0,3).map(row=>row.map(Number));
+    const asks=book.asks.slice(0,3).map(row=>row.map(Number));
+    const bestBid=bids[0][0],bestAsk=asks[0][0];
+    if(bestAsk<=bestBid || !bids.every(([p],i)=>!i||p<bids[i-1][0]) ||
+      !asks.every(([p],i)=>!i||p>asks[i-1][0]))return null;
+    const depth=rows=>rows.reduce((sum,[price,qty])=>sum+price*qty,0);
+    const bid=depth(bids),ask=depth(asks);
+    if(!Number.isFinite(bid+ask))return null;
+    return {bid,ask,spread_bps:10000*(bestAsk-bestBid)/((bestAsk+bestBid)/2),imbalance:(bid-ask)/(bid+ask)};
+  }
+  let summaryCache;
+  function boardSummary() {
+    if(!summaryCache || Date.now()-summaryCache.time>=60000)
+      summaryCache={time:Date.now(),data:load('board-summary').catch(()=>null)};
+    return summaryCache.data;
+  }
+  const vietnamDay = ()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh'}).format(new Date());
   async function liveBoard(q) {
-    const data=await load('live');
+    const [data, summary]=await Promise.all([loadLive(),boardSummary()]);
     if (!data) throw Error('Chưa có snapshot SSI để cập nhật bảng giá.');
     const age=Date.now()-Date.parse(data?.updated_at);
     const active=age>=0&&age<=15000;
@@ -173,17 +205,29 @@ window.StaticLiquidity = (() => {
     const page=Math.min(pages,Number(q.get('page'))||1);
     const levels=side=>side.map(([price,quantity])=>({price,quantity}));
     const rows=matching.slice((page-1)*size,page*size).map(row=>{
-      const current=active && freshTime(row.quote_time) && row.bids?.length && row.asks?.length;
-      const candidate=current ? row : data.last_books?.[row.symbol];
-      const previous=displayedBooks.get(row.symbol);
-      const quote=candidate && (!previous || Date.parse(candidate.quote_time)>=Date.parse(previous.quote_time))
-        ? candidate : previous;
-      if (quote) displayedBooks.set(row.symbol, quote);
-      const status=current && quote===row ? (row.status==='fresh_two_sided_quote'?'receiving':'Chưa xác minh phiên')
+      const current=active && freshTime(row.quote_time) && completeBook(row);
+      const quote=retainedBook(row.symbol,current?row:null,data.last_books?.[row.symbol]);
+      const status=current && quote?.quote_time===row.quote_time ? (row.status==='fresh_two_sided_quote'?'receiving':'Chưa xác minh phiên')
         : (quote?'Bản chụp đã lưu':'waiting');
+      const day=vietnamDay();
+      const stats=summary?.date===day?summary.rows?.[row.symbol]:null;
+      const recentTrade=row.trade_time?.startsWith(day);
+      const recentRoom=row.room_time?.startsWith(day);
+      const trade=recentTrade?row:{};
+      const room=recentRoom?row:{};
       return {...row, topic_supported:true, status,
         session:quote?.session ?? row.session, session_time:quote?.quote_time,
         bids:levels(quote?.bids || []), asks:levels(quote?.asks || []),
+        last_price:trade.last_price, last_quantity:trade.last_quantity,
+        change:trade.change ?? stats?.change, change_pct:trade.change_pct ?? stats?.change_pct,
+        total_volume:trade.total_volume ?? stats?.total_volume ?? stats?.observed_volume,
+        high:trade.high ?? stats?.high ?? stats?.observed_high,
+        low:trade.low ?? stats?.low ?? stats?.observed_low,
+        foreign_buy:room.foreign_buy ?? stats?.foreign_buy,
+        foreign_sell:room.foreign_sell ?? stats?.foreign_sell,
+        foreign_room:room.foreign_room ?? stats?.foreign_room,
+        summary_note:stats ? 'SSI tổng hợp ngày '+summary.date+
+          (stats.candle_time?' · Khi thiếu tổng hợp, KL/Cao/Thấp lấy từ nến đã đóng đến '+stats.candle_time:'') : 'Chờ dữ liệu tổng hợp SSI trong ngày.',
         trade_status:freshTime(row.trade_time)?'receiving':'stale',
         received_at:quote?.received_at || quote?.quote_time,
         reason:quote?.quote_time ? 'Báo giá SSI · '+quote.quote_time : ''};
@@ -228,14 +272,17 @@ window.StaticLiquidity = (() => {
     const endpoint=path.split('/').at(-1);
     if(endpoint==='book') {
       const symbol=q.get('symbol');
-      const snapshot=await load('live',symbol);
+      const snapshot=await loadLive();
       const row=snapshot?.rows?.find(row=>row.symbol===symbol);
-      const current=freshTime(snapshot?.updated_at)&&freshTime(row?.quote_time)&&row?.bids?.length&&row?.asks?.length;
+      const current=freshTime(snapshot?.updated_at)&&freshTime(row?.quote_time)&&completeBook(row);
       if (current && row.status==='fresh_two_sided_quote' && row.metrics?.available) return row.metrics;
-      const quote=current ? row : snapshot?.last_books?.[symbol];
+      const quote=retainedBook(symbol,current?row:null,snapshot?.last_books?.[symbol]);
       if (quote) {
-        return {symbol, available:false, status:current?'Báo giá trong phiên':'Bản chụp đã lưu',
-          reason:current?'Báo giá gốc SSI. Chỉ báo cần xác minh phiên và đơn vị.':`Bản chụp SSI ${quote.capture_session==='morning'?'phiên sáng':quote.capture_session==='afternoon'?'phiên chiều':'gần nhất'}. Xem thời gian nguồn bên dưới.`,
+        const now=current && quote.quote_time===row.quote_time;
+        const latency=Date.parse(quote.received_at)-Date.parse(quote.quote_time);
+        return {symbol, available:false, status:now?'Báo giá trong phiên':'Bản chụp đã lưu',
+          reason:'Chỉ báo tham khảo tính từ bản chụp SSI. Độ sâu dùng đơn vị giá nguồn × KL nguồn. Kiểm chứng phiên và đơn vị chuẩn vẫn đang chờ.',
+          snapshot_metrics:sourceMetrics(quote),latency_ms:Number.isFinite(latency)&&latency>=0?latency:null,
           unverified_levels:{bids:quote.bids,asks:quote.asks},event_time:quote.quote_time,
           received_at:quote.received_at||snapshot.updated_at,session:quote.session};
       }

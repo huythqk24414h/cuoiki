@@ -1,0 +1,32 @@
+name: SSI Intraday Index and Board Summary
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/ssi-intraday-index-board.yml']
+  schedule:
+    - cron: '32 2 * * 1-5'
+permissions:
+  contents: read
+concurrency:
+  group: ssi-intraday-index-board
+  cancel-in-progress: false
+jobs:
+  update:
+    if: github.ref == 'refs/heads/main' && vars.SSI_PUBLISH_EOD == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      SSI_INTRADAY_INDEX_BOARD: 'true'
+      SSI_INTRADAY_FOLLOW_SESSION: 'true'
+      SSI_API_KEY: ${{ secrets.SSI_API_KEY }}
+      SSI_API_SECRET: ${{ secrets.SSI_API_SECRET }}
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-ssi.txt
+      - run: python -m scripts.run_intraday_session
