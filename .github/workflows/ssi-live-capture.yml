@@ -1,5 +1,8 @@
 name: SSI Live Capture
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/ssi-live-capture.yml']
   workflow_dispatch:
     inputs:
       session:
@@ -10,14 +13,16 @@ on:
   schedule:
     - cron: '57 1 * * 1-5'
     - cron: '57 5 * * 1-5'
+    - cron: '7 2 * * 1-5'
+    - cron: '7 6 * * 1-5'
 permissions:
   contents: read
 concurrency:
-  group: ssi-live-capture-${{ github.event.schedule == '57 5 * * 1-5' && 'afternoon' || inputs.session || 'morning' }}
+  group: ssi-live-capture-${{ (github.event_name == 'push' || github.event.schedule == '57 5 * * 1-5' || github.event.schedule == '7 6 * * 1-5') && 'afternoon' || inputs.session || 'morning' }}
   cancel-in-progress: false
 jobs:
   morning:
-    if: ${{ github.event.schedule == '57 1 * * 1-5' || inputs.session == 'morning' }}
+    if: ${{ github.event.schedule == '57 1 * * 1-5' || github.event.schedule == '7 2 * * 1-5' || inputs.session == 'morning' }}
     runs-on: ubuntu-latest
     timeout-minutes: 345
     env:
@@ -43,7 +48,7 @@ jobs:
         working-directory: ssi-capture
         run: python -m scripts.capture_order_book
   afternoon:
-    if: ${{ github.event.schedule == '57 5 * * 1-5' || inputs.session == 'afternoon' }}
+    if: ${{ github.event_name == 'push' || github.event.schedule == '57 5 * * 1-5' || github.event.schedule == '7 6 * * 1-5' || inputs.session == 'afternoon' }}
     runs-on: ubuntu-latest
     timeout-minutes: 205
     env:

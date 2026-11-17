@@ -178,7 +178,7 @@ window.StaticLiquidity = (() => {
     }
     if(path!=='index' && !data.symbols[symbol]) rows=enrichArchive(rows);
     const members=(await marketDirectory())?.index_memberships?.VN30||[];
-    const lower=q.get('period')!=='recent'&&(symbol==='VN30'||members.includes(symbol)) ? '2000-07-28' : '2022-01-01';
+    const lower=q.get('period')!=='recent'&&(path==='index'||members.includes(symbol)) ? '2000-07-28' : '2022-01-01';
     const preview=q.get('preview')==='1'&&path==='series';
     const today=vietnamDay();
     let open=null;
@@ -377,8 +377,13 @@ window.StaticLiquidity = (() => {
       const result=await load('depth-window',symbol);
       const states={WARMUP:'Đang tích lũy mẫu',CENSORED:'Chưa đủ điều kiện kết luận',
         OBSERVED_LOW_DEPTH:'Đã ghi nhận độ sâu thấp',NO_OBSERVED_EVENT:'Chưa ghi nhận đợt độ sâu thấp'};
-      if(!result?.preview)return {symbol,state:'Chờ bộ thu 1 giây',valid_samples:0,samples:0,
-        reason:'Chưa nhận được chuỗi mẫu 1 giây từ bộ thu của phiên. Bản chụp bảng giá không đủ để suy ra kết quả.'};
+      if(!result?.preview){
+        const time=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Ho_Chi_Minh',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date());
+        const breakTime=time>='11:30'&&time<'13:00';
+        return {symbol,state:breakTime?'Nghỉ giữa phiên':'Chờ chuỗi mẫu 1 giây',valid_samples:0,samples:0,
+          snapshot_at:result?.snapshot_at,reason:breakTime?'Khung theo dõi chiều bắt đầu từ 13:00 giờ Việt Nam.':
+            'Sổ lệnh có thể đã nhận ảnh chụp; cửa sổ 60 giây chỉ có kết quả khi bộ thu gửi đủ mẫu liên tục.'};
+      }
       return {...result,state:states[result.state]||result.state,stale:!freshTime(result.updated_at)};
     }
     const published=await catalog();

@@ -185,7 +185,7 @@
     q('#alert-page').textContent=`${selected.length} ${alertView?.value==='sessions'?'phiên':'sự kiện'} · trang ${total?page:0}/${total}`;
     q('#alert-prev').disabled=page<=1;q('#alert-next').disabled=page>=total;
   }
-  let alertView, alertVersion;
+  let alertView, alertVersion, intradayAlert;
   if(window.StaticLiquidity){
     const label=el('label','Hiển thị');
     alertView=el('select');
@@ -194,6 +194,32 @@
     }
     label.append(alertView);q('#alert-priority').closest('label').after(label);
     alertView.addEventListener('change',()=>{q('#alert-priority').value='ALL';loadAlerts();});
+    const card=el('article');card.className='card';
+    intradayAlert=el('p','Đang đọc nến SSI…');intradayAlert.setAttribute('role','status');
+    const link=el('a','Mở Phân tích của mã');link.href='#analysis';link.className='text-link';
+    card.append(el('h2','Theo dõi RV20 trong phiên'),intradayAlert,link);
+    q('#alerts .method-panel').before(card);
+    const useDates=el('button','Dùng ngày Tổng quan');useDates.type='button';useDates.className='button secondary';
+    q('#alert-show-all').after(useDates);
+    useDates.onclick=()=>{
+      const state=window.MarketState.value;
+      alertFullHistory=false;q('#alert-from').value=state.range==='CUSTOM'?state.from:'';
+      q('#alert-to').value=state.range==='CUSTOM'?state.to:'';
+      loadAlerts();
+    };
+  }
+  async function loadIntradayAlert(symbol){
+    if(!intradayAlert||!symbol)return;
+    try{
+      const data=await request('/api/market/series?'+new URLSearchParams({symbol,range:'1D',resolution:'1D',preview:'1'}));
+      if(symbol!==window.MarketState.value.symbol)return;
+      const row=data.open_session;
+      if(!row){intradayAlert.textContent=symbol+' · Chưa có điểm nội phiên đang mở. Kiểm tra lịch sử EOD bên dưới.';return;}
+      const value=Number(row.relative_volume20);
+      const badge=row.relative_volume20==null?'Chưa đủ TB20':
+        value>=3?'Đã chạm ngưỡng ưu tiên cao':value>=2?'Đã chạm ngưỡng theo dõi':'Chưa chạm ngưỡng ≥2';
+      intradayAlert.textContent=`${symbol} · ${row.date} đến ${row.closed_at.slice(11,16)} ICT · KL quan sát ${fmt(row.volume_shares,0)} · TB20 ${fmt(row.volume_avg20_previous,0)} · RV20 tạm tính ${fmt(row.relative_volume20,3)} lần · ${badge}.`;
+    }catch{if(symbol===window.MarketState.value.symbol)intradayAlert.textContent=symbol+' · Tạm thời chưa đọc được nến SSI.';}
   }
   async function loadAlerts(quiet=false){
     if(quiet===true&&q('#alert-refresh').disabled)return;
@@ -203,7 +229,15 @@
       const state=window.MarketState.value;
       const symbol=state.symbol||q('#symbol-filter').value;
       const from=q('#alert-from').value,to=q('#alert-to').value;
-      if(window.StaticLiquidity){const option=el('option',symbol||'Chưa chọn mã');option.value=symbol;q('#alert-symbol').replaceChildren(option);}
+      if(window.StaticLiquidity){
+        const selector=q('#alert-symbol'),symbols=new Set([...q('#book-symbol').options].map(option=>option.value).filter(Boolean));
+        if(symbol)symbols.add(symbol);
+        if([...symbols].join(',')!==[...selector.options].map(option=>option.value).join(',')){
+          selector.replaceChildren(...[...symbols].map(code=>{const option=el('option',code);option.value=code;return option;}));
+        }
+        selector.value=symbol;
+        loadIntradayAlert(symbol);
+      }
       const params=window.StaticLiquidity ? {symbol,period:alertFullHistory?'vn30':state.period,view:alertView.value,...(from?{from}:{}),...(to?{to}:{})}
         : {symbol,from:from||state.from||window.HistoricalRange?.start||'2026-01-01',to:to||state.to};
       const data=await request('/api/market/alerts?'+new URLSearchParams(params));if(id!==alertRevision)return;
@@ -222,7 +256,12 @@
       alerts=[];alertSummary='Chưa đánh giá: '+error.message;renderAlerts();q('#overview-alert-state').textContent='Chưa đọc được cảnh báo SSI.';}
     finally{if(id===alertRevision)q('#alert-refresh').disabled=false;}
   }
-  ['alert-symbol','alert-priority','alert-from','alert-to'].forEach(id=>q('#'+id).addEventListener('change',()=>{page=1;q('#alert-evidence-panel').hidden=true;if(window.StaticLiquidity&&['alert-from','alert-to'].includes(id))loadAlerts();else renderAlerts();}));
+  ['alert-symbol','alert-priority','alert-from','alert-to'].forEach(id=>q('#'+id).addEventListener('change',()=>{
+    page=1;q('#alert-evidence-panel').hidden=true;
+    if(window.StaticLiquidity&&id==='alert-symbol')window.MarketState.set({symbol:q('#alert-symbol').value});
+    else if(window.StaticLiquidity&&['alert-from','alert-to'].includes(id))loadAlerts();
+    else renderAlerts();
+  }));
   q('#alert-show-all').addEventListener('click',()=>{
     alertFullHistory=true;
     q('#alert-from').value='';

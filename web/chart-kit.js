@@ -6,12 +6,18 @@
   ['2h','H2 · 2 giờ'],['4h','H4 · theo buổi'],['1D','D · Ngày'],['1W','W · Tuần'],
   ['1M','M · Tháng'],['1Q','Q · Quý'],['1Y','Y · Năm']];
  const intradayFrame=frame=>['15m','30m','1h','2h','4h'].includes(frame);
- const historyRange=(range,frame)=>{
-  if(frame==='1D'||['CUSTOM','MAX'].includes(range))return range;
-  const ranges=['1D','5D','1W','1M','3M','6M','YTD','1Y','3Y','5Y','MAX'];
-  const minimum={'1W':'1Y','1M':'3Y','1Q':'3Y','1Y':'MAX'}[frame];
-  return ranges.indexOf(range)>=ranges.indexOf(minimum)?range:minimum;
- };
+ function filteredCandles(rows,{range,from,to}){
+  const day=row=>row.date.slice(0,10);
+  const days=[...new Set(rows.map(day))];
+  if(range==='CUSTOM')return rows.filter(row=>(!from||day(row)>=from)&&(!to||day(row)<=to));
+  const sessions={'1D':1,'5D':5,'1W':5,'1M':22,'3M':66,'6M':132,'1Y':264,'3Y':792,'5Y':1320}[range];
+  if(sessions){const start=days.at(-sessions)||days[0];return rows.filter(row=>day(row)>=start);}
+  if(range==='YTD'&&days.length)return rows.filter(row=>day(row).slice(0,4)===days.at(-1).slice(0,4));
+  return rows;
+ }
+ function filterLabel({range,from,to}){
+  return range==='CUSTOM'?[from||'đầu chuỗi',to||'mới nhất'].join(' → '):range||'MAX';
+ }
  function frameSelect(){
   const select=document.createElement('select');
   select.setAttribute('aria-label','Khung thời gian biểu đồ');
@@ -201,7 +207,7 @@
    plot.addEventListener('keydown',e=>{if(e.key==='Home')reset.click();});
   }
  }
- window.ChartKit={render,destroy,frameSelect,intradayFrame,intradayRows,dailyRows,historyRange,withOpenDay,drawFinancial,financialZoom,
+ window.ChartKit={render,destroy,frameSelect,intradayFrame,intradayRows,dailyRows,withOpenDay,drawFinancial,financialZoom,filteredCandles,filterLabel,
   refreshMs:()=>window.StaticLiquidity?60000:5000,
   sourceFrame:frame=>frame==='30m'||frame==='2h'?'15m':frame};
  window.addEventListener('resize',()=>charts.forEach(c=>{if(c.getOption)c.resize();}));

@@ -7,7 +7,7 @@
  for(const [v,t] of [['15m','15 phút'],['1h','1 giờ'],['4h','Theo buổi sáng/chiều']]){const o=document.createElement('option');o.value=v;o.textContent=t;select.append(o);}
  const status=document.createElement('p'),plot=document.createElement('div');plot.className='intraday-chart';
  const note=document.createElement('p');note.textContent='Tự kiểm tra local mỗi 5 giây; tải SSI tối đa mỗi 60 giây theo mã. Nến đang hình thành có thể đổi. 4H tách nghỉ trưa nên có thể thiếu kỳ. Giá/KL giữ đơn vị nguồn. Không dùng nến để dựng sổ lệnh.';
- const dateNote=document.createElement('p');dateNote.className='helper';dateNote.textContent='Nến nội phiên đọc riêng theo mã và khung nến. Bộ lọc ngày EOD phía trên không giới hạn biểu đồ này.';
+ const dateNote=document.createElement('p');dateNote.className='helper';dateNote.textContent='Nến nội phiên theo mã, khung nến và bộ lọc ngày phía trên.';
  card.append(title,select,status,dateNote,plot,note);section.insertBefore(card,section.children[1]);
  const warning=document.createElement('article');warning.className='card';const wt=document.createElement('h2');wt.textContent='Độ sâu bên mua · cửa sổ quan sát 60 giây';const ws=document.createElement('p');const wn=document.createElement('p');wn.textContent=window.StaticLiquidity?
   'Lấy mẫu sổ lệnh SSI mỗi giây. So độ sâu ba mức mua với phân vị 10% từ ít nhất 100 mẫu trước đó. Một đợt thấp cần kéo dài ít nhất 15 giây trong cửa sổ 60 giây. Kết quả chỉ dùng để quan sát, theo đơn vị nguồn.':
@@ -18,13 +18,14 @@
  const dailyCard=dailyPlot.closest('.history-card');
  const toolbar=document.createElement('label');toolbar.textContent='Khung biểu đồ ';
  const overviewSelect=ChartKit.frameSelect();
+ overviewSelect.value=window.MarketState.value.resolution;
  toolbar.append(overviewSelect);dailyCard.querySelector('.card-heading').append(toolbar);
  const overviewPane=document.createElement('div');overviewPane.hidden=true;
  const overviewStatus=document.createElement('p');overviewStatus.className='helper';overviewStatus.setAttribute('role','status');
  const overviewPlot=document.createElement('div');overviewPlot.className='chart-stage';
  overviewPane.append(overviewStatus,overviewPlot);dailyPlot.after(overviewPane);
  const overviewNote=document.createElement('p');overviewNote.className='helper';
- overviewNote.textContent='H4 gộp theo buổi. Từ khung D trở lên, kỳ đang mở dùng các nến SSI M15 đã đóng. Khối lượng là phần đã quan sát trong khớp liên tục.';
+ overviewNote.textContent='Biểu đồ dùng bộ lọc ngày phía trên. H4 gộp theo buổi. Kỳ đang mở dùng nến SSI M15 đã đóng.';
  overviewPane.append(overviewNote);
  const sessionStamp=document.createElement('p');sessionStamp.className='helper';
  document.querySelector('.snapshot-banner').after(sessionStamp);
@@ -40,9 +41,10 @@
    const intraday=ChartKit.intradayFrame(resolution);
    const market=window.MarketState.value;
    const query=new URLSearchParams(intraday?{symbol,resolution:ChartKit.sourceFrame(resolution)}:
-     {symbol,resolution:'1D',range:ChartKit.historyRange(market.range,resolution),period:market.period,to:market.to,
+     {symbol,resolution:'1D',range:market.range,period:market.period,to:market.to,
       ...(market.range==='CUSTOM'&&market.from?{from:market.from}:{})});
-   const key=resolution+':'+query,ticket=++overviewVersion;
+   const rangeLabel=ChartKit.filterLabel(market);
+   const key=resolution+':'+query+':'+rangeLabel,ticket=++overviewVersion;
    const changed=key!==overviewKey;overviewKey=key;overviewBusy=true;
    if(changed){ChartKit.destroy(overviewPlot);overviewRevision=undefined;overviewStatus.textContent=`Đang tải nến ${symbol}…`;sessionStamp.textContent=overviewStatus.textContent;}
    try{
@@ -52,7 +54,7 @@
        !intraday&&window.StaticLiquidity?request('/api/market/intraday?'+new URLSearchParams({symbol,resolution:'15m'})):null,
      ]);
      if(ticket!==overviewVersion||overviewSelect.value!==resolution)return;
-     const rows=intraday?ChartKit.intradayRows(data.rows||[],resolution,symbol):ChartKit.dailyRows(
+     const rows=intraday?ChartKit.filteredCandles(ChartKit.intradayRows(data.rows||[],resolution,symbol),market):ChartKit.dailyRows(
        ChartKit.withOpenDay(data.rows||[],minutes?.rows||[],symbol,through),resolution);
      const last=rows.at(-1);
      const asOf=last&&(intraday?vn(last.closed_at||last.date):last.date);
@@ -60,8 +62,8 @@
      const stamp=last?.provisional?`${asOf} · Đang mở, tạm tính đến ${vn(last.closed_at)}`:asOf;
      sessionStamp.textContent=last?`${label} · ${symbol} · ${stamp}`:`${label} · ${symbol} · chưa có dữ liệu`;
      const retrieved=(intraday?data:minutes)?.retrieved_at;
-     overviewStatus.textContent=last?`${symbol} · ${rows.length} kỳ · ${stamp}${retrieved?' · Lần tải '+vn(retrieved):''}`:
-       `${symbol} · Chưa có nến cho khung này. Có thể chọn khung nhỏ hơn hoặc lịch sử EOD.`;
+     overviewStatus.textContent=last?`${symbol} · ${rows.length} kỳ · ${stamp} · Bộ lọc ${rangeLabel}${retrieved?' · Lần tải '+vn(retrieved):''}`:
+       `${symbol} · ${rangeLabel} · Không có nến SSI trong khoảng này. Thử khung D nếu đang xem lịch sử xa.`;
      if(!rows.length){ChartKit.destroy(overviewPlot);overviewRevision=undefined;return;}
      const revision=[key,rows.length,last.date,last.close_vnd,last.volume_shares,last.closed_at,data.retrieved_at,data.revision].join(':');
      if(revision===overviewRevision)return;
@@ -82,7 +84,12 @@
    refreshOverview(true);
  }
  overviewSelect.addEventListener('change',switchOverview);
- window.addEventListener('market-state-change',()=>refreshOverview(true));
+ let globalResolution=window.MarketState.value.resolution;
+ window.addEventListener('market-state-change',()=>{
+   const resolution=window.MarketState.value.resolution;
+   if(resolution!==globalResolution){globalResolution=resolution;overviewSelect.value=resolution;switchOverview();}
+   else refreshOverview(true);
+ });
  window.addEventListener('hashchange',()=>refreshOverview(true));
  document.addEventListener('visibilitychange',()=>refreshOverview());
  setInterval(refreshOverview,ChartKit.refreshMs());
@@ -95,9 +102,11 @@
    if(page==='analysis'){
     const r=await request('/api/market/intraday?'+new URLSearchParams({symbol,resolution}));
     if(symbol!==(window.MarketState.value.symbol||'SSI')||resolution!==select.value)return;
-    status.textContent=`${symbol} · ${r.status} · ${r.rows.length} nến · nến nguồn cuối ${vn(r.last_source_time)} · lần tải ${vn(r.retrieved_at)}${r.error?' · '+JSON.stringify(r.error):''}${r.refreshing?' · đang tải SSI':''}`;
+    const market=window.MarketState.value;
+    const rows=ChartKit.filteredCandles(ChartKit.intradayRows(r.rows,resolution,symbol),market);
+    status.textContent=`${symbol} · ${rows.length} nến · Bộ lọc ${ChartKit.filterLabel(market)} · Nến cuối trong khoảng ${vn(rows.at(-1)?.closed_at||rows.at(-1)?.date)} · Lần tải ${vn(r.retrieved_at)}`;
     if(!chart)chart=echarts.init(plot);
-    ChartKit.drawFinancial(chart,ChartKit.intradayRows(r.rows,resolution,symbol),{zoom:ChartKit.financialZoom(chart)});
+    ChartKit.drawFinancial(chart,rows,{zoom:ChartKit.financialZoom(chart)});
    }else{
     const r=await request('/api/market/depth-warning?'+new URLSearchParams({symbol}));
     if(symbol!==(window.MarketState.value.symbol||'SSI')||location.hash!=='#alerts')return;
@@ -108,10 +117,12 @@
       r.stale?'Bản đo gần nhất '+vn(r.updated_at):'Cập nhật '+vn(r.updated_at),
       r.reason||null,
     ].filter(Boolean).join(' · '):
-      `${r.symbol} · ${r.state} · ${r.valid_samples}/${r.samples} mẫu hợp lệ · ${r.reason||r.method||'Đang chờ mẫu SSI thật'}`;
+      [r.symbol,r.state,r.samples?`${r.valid_samples}/${r.samples} mẫu hợp lệ`:null,
+       r.reason||r.method,r.snapshot_at?'Mốc bộ thu sổ lệnh '+vn(r.snapshot_at):null].filter(Boolean).join(' · ');
    }
   }catch(e){(page==='analysis'?status:ws).textContent='Chưa đọc được dữ liệu: '+e.message;}finally{busy=false;}
  }
  select.addEventListener('change',update);window.addEventListener('hashchange',update);window.addEventListener('market-state-change',update);window.addEventListener('resize',()=>chart?.resize());setInterval(update,ChartKit.refreshMs());update();
  if(window.StaticLiquidity)setInterval(()=>{if(location.hash==='#alerts')update();},5000);
+ document.addEventListener('visibilitychange',update);
 })();

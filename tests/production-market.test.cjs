@@ -130,6 +130,10 @@ test('chart frames aggregate genuine candles without bridging lunch or filling g
   assert.equal(week[0].provisional,true);
   assert.equal(kit.withOpenDay(past,minuteBars,'VNINDEX','2026-11-16','2026-11-17').length,1);
   assert.equal(kit.withOpenDay(provisional,minuteBars,'VNINDEX',null,'2026-11-17').length,2);
+  const all=[{date:'2026-11-16T14:00:00+07:00'},...kit.intradayRows(rows,'15m','VNINDEX')];
+  assert.equal(kit.filteredCandles(all,{range:'1D'}).length,rows.length);
+  assert.equal(kit.filteredCandles(all,{range:'CUSTOM',from:'2026-11-16',to:'2026-11-16'}).length,1);
+  assert.equal(kit.filteredCandles(all,{range:'CUSTOM',from:'2026-11-14',to:'2026-11-13'}).length,0);
 });
 
 test('the financial chart tooltip keeps full SSI data in all display modes', () => {

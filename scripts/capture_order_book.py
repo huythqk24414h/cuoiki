@@ -48,6 +48,9 @@ def main():
     opens, closes = windows[session]
     earliest = clock_time(6) if session == "morning" else clock_time(11, 30)
     if now.time() < earliest:
+        if os.environ.get("GITHUB_EVENT_NAME") == "push":
+            print("Deployment is before the afternoon scheduling window; regular schedule remains enabled.", flush=True)
+            return
         raise SystemExit(f"Start {session} at or after {earliest:%H:%M} ICT.")
     deadline = datetime.combine(now.date(), closes, VN)
     if now >= deadline:
@@ -59,6 +62,8 @@ def main():
 def capture_session(symbols, day, opens, deadline, session):
     start = datetime.combine(day, opens, VN)
     connect_at = start - timedelta(minutes=3)
+    if datetime.now(VN) < connect_at:
+        print(f"Waiting for SSI {session} session at {start.isoformat()}.", flush=True)
     while datetime.now(VN) < connect_at:
         time.sleep(min(30, max(0, (connect_at - datetime.now(VN)).total_seconds())))
     if datetime.now(VN) >= deadline:
