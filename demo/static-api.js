@@ -203,13 +203,13 @@ window.StaticLiquidity = (() => {
       .filter(row=>boardMatches(row,q,{VN30:members}));
     const size=Number(q.get('size'))||30,pages=Math.max(1,Math.ceil(matching.length/size));
     const page=Math.min(pages,Number(q.get('page'))||1);
-    const levels=side=>side.map(([price,quantity])=>({price,quantity}));
+    const levels=side=>side.slice(0,3).map(([price,quantity])=>({price,quantity}));
+    const day=vietnamDay();
     const rows=matching.slice((page-1)*size,page*size).map(row=>{
       const current=active && freshTime(row.quote_time) && completeBook(row);
       const quote=retainedBook(row.symbol,current?row:null,data.last_books?.[row.symbol]);
       const status=current && quote?.quote_time===row.quote_time ? (row.status==='fresh_two_sided_quote'?'receiving':'Chưa xác minh phiên')
         : (quote?'Bản chụp đã lưu':'waiting');
-      const day=vietnamDay();
       const stats=summary?.date===day?summary.rows?.[row.symbol]:null;
       const recentTrade=row.trade_time?.startsWith(day);
       const recentRoom=row.room_time?.startsWith(day);
@@ -232,9 +232,10 @@ window.StaticLiquidity = (() => {
         received_at:quote?.received_at || quote?.quote_time,
         reason:quote?.quote_time ? 'Báo giá SSI · '+quote.quote_time : ''};
     });
+    const boardNote=active?'SSI DATA · '+data.updated_at+' · Xem trạng thái từng mã.'
+      :members.length?'SSI DATA · Bản chụp đã lưu, xem giờ nguồn từng mã.':'Chưa có snapshot SSI trong phiên.';
     return {mode:'DATA',rows,page,pages,total:matching.length,catalog_total:members.length,
-      display_note:active?'SSI DATA · '+data.updated_at+' · Xem trạng thái từng mã.'
-        :members.length?'SSI DATA · Bản chụp đã lưu, xem giờ nguồn từng mã.':'Chưa có snapshot SSI trong phiên.',
+      display_note:boardNote+(summary?.date===day?' Khi thiếu tổng hợp SSI, Tổng KL, Cao và Thấp tính trên các nến đã đóng.':''),
       units_note:'Giữ đơn vị nguồn SSI.',view_note:'Danh sách mã do collector theo dõi.'};
   }
 
