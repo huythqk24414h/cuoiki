@@ -218,3 +218,47 @@ test('a depth flag remains as a dated prior observation after reload', async () 
   assert.equal(history.hidden,false);
   assert.match(history.children[1].children[0].children.join(' '),/Lần ghi nhận trước: SSI .*14:29:59/);
 });
+
+
+test('VN30 briefing advances with intraday candles while official EOD stays on the previous day', async () => {
+  class Element {
+    constructor(){this.nodes=new Map();this.children=[];this.textContent='';this.value='';}
+    append(...nodes){this.children.push(...nodes);}
+    before(...nodes){this.beforeNodes=nodes;}
+    replaceChildren(...nodes){this.children=nodes;}
+    addEventListener(){}
+    querySelector(key){if(!this.nodes.has(key))this.nodes.set(key,new Element());return this.nodes.get(key);}
+    closest(){return this.parent;}
+    insertRow(){const row=new Element();this.children.push(row);return row;}
+    get rows(){return this.children;}
+    get lastChild(){return this.children.at(-1);}
+  }
+  const document=new Element(),root=document.querySelector('#vn30-review');
+  document.createElement=()=>new Element();document.querySelector('#review-session').parent=root;
+  const now=Date.parse('2026-11-18T11:50:00+07:00');
+  const DateAt=class extends Date {static now(){return now;}};
+  const history=Array.from({length:21},(_,i)=>({date:new Date(Date.UTC(2026,9,28+i)).toISOString().slice(0,10),volume_shares:'100'}));
+  let volume='250',last='2026-11-18T11:30:00+07:00';
+  const intervals=[];
+  await runInNewContext(readFileSync(require.resolve('../web/vn30-brief.js'),'utf8'),{
+    document,window:{addEventListener(){}},AbortSignal,location:{hash:'#monitor'},Date:DateAt,
+    setInterval(callback,ms){intervals.push({callback,ms});},
+    localStorage:{getItem(){return null;},setItem(){}},
+    fetch:async url=>({ok:true,json:async()=>{
+      if(url.includes('kind=live'))return {updated_at:'2026-11-17T14:44:57+07:00',last_books:{}};
+      if(url.includes('kind=history'))return {symbols:{FPT:{last:'2026-11-17',revision:'r1'}}};
+      if(url.includes('kind=catalog'))return {index_memberships:{VN30:['FPT']}};
+      if(url.includes('kind=intraday'))return {updated_at:last,coverage:{FPT:{last,session_volume:volume}}};
+      return history;
+    }}),
+  });
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.match(root.querySelector('#review-session').textContent,/2026-11-18/);
+  assert.match(root.querySelector('#review-session').textContent,/EOD chính thức 2026-11-17/);
+  assert.match(root.beforeNodes[0].children[2].textContent,/2,5/);
+  assert.match(root.beforeNodes[0].children[3].textContent,/Chưa có sổ lệnh ngày 2026-11-18/);
+  volume='300';last='2026-11-18T13:15:00+07:00';
+  await intervals.find(item=>item.ms===60000).callback();
+  assert.match(root.beforeNodes[0].children[2].textContent,/3×/);
+  assert.match(root.querySelector('#review-session').textContent,/13:15:00/);
+});

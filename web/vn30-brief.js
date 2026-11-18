@@ -41,7 +41,14 @@
     button.setAttribute('aria-label','Mở hồ sơ '+symbol);
     button.onclick=()=>window.SymbolDossier.open(symbol);return button;
   }
-  let flagVersion;
+  let flagVersion, lastLive, bookMissing=false;
+  const todayIct=()=>new Date(Date.now()+7*3600000).toISOString().slice(0,10);
+  function renderSources(){
+    const candles=data?.evaluationTime?'Nến SSI đến '+stamp(data.evaluationTime):'Đang đọc nến SSI';
+    const books=lastLive?.updated_at?'Sổ lệnh ghi nhận cuối '+stamp(lastLive.updated_at):'Đang đọc sổ lệnh';
+    digestSource.textContent=candles+' · '+books+'.';
+    flagTime.textContent=candles+' · EOD chính thức '+(data?.lastEod||'đang đọc')+'.';
+  }
   const eventKey=entry=>entry.kind+':'+(entry.symbol||'VN30');
   function flagRow(entry,previous=false){
     const item=make('li');if(entry.symbol)item.append(ticker(entry.symbol),' · ');
@@ -64,7 +71,7 @@
     const active=new Set(entries.map(eventKey));
     const old=Object.values(remembered).filter(entry=>entry?.observedAt&&!active.has(eventKey(entry)))
       .sort((a,b)=>b.observedAt-a.observedAt);
-    const version=JSON.stringify([entries,old]);
+    const version=JSON.stringify([entries,old,bookMissing]);
     if(version===flagVersion)return;
     flagVersion=version;
     flagList.replaceChildren(...entries.map(entry=>flagRow(entry)));
@@ -73,7 +80,7 @@
     if(!old.length||!entries.length)previousFlags.open=Boolean(old.length);
     previousTitle.textContent='Lần ghi nhận trước ('+old.length+')';
     flagStatus.textContent=entries.length?entries.length+' dấu hiệu theo quy tắc đang theo dõi.':
-      'Chưa thấy dấu hiệu đạt ngưỡng trong dữ liệu hiện có.';
+      bookMissing?'Chưa có sổ lệnh của ngày hôm nay. Đang hiển thị các lần ghi nhận đã lưu.':'Chưa thấy dấu hiệu đạt ngưỡng trong dữ liệu hiện có.';
   }
   function refreshFlags(live,fresh,recent){
     const now=Date.now();
@@ -111,6 +118,8 @@
     checkingBook = true;
     try {
       const live = await get('kind=live');
+      lastLive=live;
+      bookMissing=live.updated_at?.slice(0,10)!==todayIct();
       const isRecent = value => {
         const age = Date.now() - Date.parse(value);
         return age >= 0 && age <= 30000;
@@ -125,9 +134,8 @@
           saved ? saved + ' mã có bản chụp sổ lệnh đã lưu' : 'Đang chờ báo giá mua/bán') +
         (trades.length ? ' · ' + trades.length + ' mã có khối lượng khớp lũy kế' : '') +
         '. Xem giờ nguồn trong tab Sổ lệnh.';
-      digestSource.textContent='Mốc bộ thu SSI '+stamp(live.updated_at)+'.';
-      flagTime.textContent='Mốc sổ lệnh mới nhất: '+stamp(live.updated_at)+' · EOD '+(data?.session||'đang đọc')+'.';
-      digestDepth.textContent=fresh.length+' mã có báo giá hai phía trong 30 giây · '+saved+' mã có bản chụp lưu.';
+      renderSources();
+      digestDepth.textContent=(bookMissing?'Chưa có sổ lệnh ngày '+todayIct()+' · ':'')+fresh.length+' mã có báo giá hai phía trong 30 giây · '+saved+' mã có bản chụp lưu.';
       refreshFlags(live,fresh,isRecent);
     } catch (error) {
       bookStatus.textContent = error.message === '404' ? 'Chưa có sổ lệnh SSI được công bố.' :
@@ -148,16 +156,20 @@
     if(checkingEod || document.hidden || !['', '#monitor'].includes(location.hash))return;
     checkingEod = true;
     try{
-      const history=await get('kind=history');
+      const [history,coverage]=await Promise.all([get('kind=history'),get('kind=intraday').catch(()=>null)]);
       const members=data?.members || [...new Set((await get('kind=catalog&board=VN30&size=30')).index_memberships?.VN30 || [])];
-      const session=members.map(symbol=>history.symbols[symbol]?.last).filter(Boolean).sort().at(-1);
+      const lastEod=members.map(symbol=>history.symbols[symbol]?.last).filter(Boolean).sort().at(-1);
+      const covered=coverage?.coverage||coverage?.symbols||{};
+      const latest=members.map(symbol=>covered[symbol]?.last).filter(Boolean).sort().at(-1);
+      const session=latest?.slice(0,10)>lastEod?latest.slice(0,10):lastEod;
+      const refreshKey=JSON.stringify([session,coverage?.updated_at,history.updated_at]);
       if(!session)throw Error('Missing session');
       const pending=members.filter(symbol=>{
         const entry=history.symbols[symbol];
         return entry && seriesCache.get(symbol)?.revision!==(entry.revision || entry.last);
       });
-      if(data?.session===session && !pending.length){
-        status.textContent='SSI EOD · Phiên '+data.session;
+      if(data?.refreshKey===refreshKey && !pending.length){
+        renderBrief();
         return;
       }
       let next=0;
@@ -173,9 +185,16 @@
           }catch {}
         }
       }));
-      const upcoming=members.map(symbol=>evaluate(symbol,seriesCache.get(symbol)?.rows || [],session));
+      const upcoming=members.map(symbol=>{
+        const rows=seriesCache.get(symbol)?.rows||[], intraday=covered[symbol];
+        const volume=Number(intraday?.session_volume);
+        const current=rows.at(-1)?.date<session && intraday?.last?.slice(0,10)===session &&
+          intraday.session_volume!=null && Number.isFinite(volume) && volume>=0;
+        const latest=current?{symbol,date:session,volume_shares:volume,provisional:true,closed_at:intraday.last}:null;
+        return evaluate(symbol,latest?[...rows,latest]:rows,session);
+      });
       if(!upcoming.some(row=>row.latest))throw Error('No confirmed EOD rows');
-      data={members,session};
+      data={members,session,lastEod,evaluationTime:latest,refreshKey,provisional:upcoming.some(row=>row.latest?.provisional)};
       records=upcoming;
       control.disabled=false;
       renderBrief();
@@ -207,6 +226,7 @@
       cell(tr, fmt(r.latest ? Number(r.latest.volume_shares) : NaN));
       cell(tr, fmt(r.rv, 4));
       cell(tr, r.rv == null ? 'Chưa đủ dữ liệu' : r.rv >= 3 ? 'Ưu tiên cao' : r.rv >= 2 ? 'Theo dõi' : 'Dưới ngưỡng');
+      if(r.latest?.provisional)tr.lastChild.textContent+=' · Tạm tính';
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'button secondary';
@@ -222,7 +242,7 @@
       '#review-symbol': r.symbol + ' · Bằng chứng RV20',
       '#review-reason': r.rv == null ? 'Chưa đủ quan sát hợp lệ để tính RV20.' :
         'RV20 = ' + fmt(+r.latest.volume_shares) + ' / ' + fmt(r.avg,2) + ' = ' + fmt(r.rv,4) + ' lần.',
-      '#review-source': 'Nguồn SSI EOD từ production. Phiên đánh giá ' + (r.latest?.date || '—') +
+      '#review-source': (r.latest?.provisional?'SSI trong phiên, khối lượng tích lũy đến '+stamp(r.latest.closed_at)+'. Phiên đánh giá ':'Nguồn SSI EOD. Phiên đánh giá ') + (r.latest?.date || '—') +
         '. Ngưỡng theo dõi ≥ 2 lần, ưu tiên cao ≥ 3 lần.',
     };
     for (const [selector, value] of Object.entries(fields)) detail.querySelector(selector).textContent = value;
@@ -251,8 +271,8 @@
     location.hash = '#analysis';
   });
   root.querySelector('#review-export').addEventListener('click', () => {
-    const csv = ['symbol,session,volume_source,mean_previous_20,rv20',
-      ...records.map(r => [r.symbol,r.latest?.date ?? '',r.latest?.volume_shares ?? '',r.avg ?? '',r.rv ?? ''].join(','))].join('\r\n');
+    const csv = ['symbol,session,volume_source,mean_previous_20,rv20,provisional,source_time',
+      ...records.map(r => [r.symbol,r.latest?.date ?? '',r.latest?.volume_shares ?? '',r.avg ?? '',r.rv ?? '',Boolean(r.latest?.provisional),r.latest?.closed_at||r.latest?.date||''].join(','))].join('\r\n');
     const url = URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
     const link = document.createElement('a');
     link.href=url; link.download='liquiditylab-vn30-'+data.session+'.csv'; link.click();
@@ -273,12 +293,16 @@
   function renderBrief(){
   const eligible = records.filter(r=>r.rv!=null);
   const alerts = eligible.filter(r=>r.rv>=2).sort((a,b)=>b.rv-a.rv||a.symbol.localeCompare(b.symbol));
-  digestEod.textContent=`EOD ${data.session} · ${eligible.length}/${data.members.length} mã tính được RV20 · ${alerts.length} mã đạt ≥2`+
+  digestEod.textContent=`${data.provisional?'Trong phiên · RV20 tạm tính':'EOD'} ${data.session} · ${eligible.length}/${data.members.length} mã tính được RV20 · ${alerts.length} mã đạt ≥2`+
     (alerts.length?' · Cao nhất '+alerts.slice(0,3).map(r=>r.symbol+' '+fmt(r.rv,2)+'×').join(', '):'')+'.';
-  eodFlags=alerts.filter(r=>r.rv>=3).map(r=>({kind:'rv20',symbol:r.symbol,text:'RV20 cao '+fmt(r.rv,2)+' lần',
-    source:'SSI EOD '+r.latest.date,observedAt:Date.parse(r.latest.date+'T00:00:00+07:00')}));
+  eodFlags=alerts.map(r=>({kind:'rv20',symbol:r.symbol,text:(r.rv>=3?'RV20 ưu tiên cao ':'RV20 theo dõi ')+fmt(r.rv,2)+' lần'+(r.latest.provisional?' · tạm tính':''),
+    source:r.latest.provisional?'SSI đến '+stamp(r.latest.closed_at):'SSI EOD '+r.latest.date,
+    observedAt:Date.parse(r.latest.closed_at||r.latest.date+'T00:00:00+07:00')}));
   drawFlags();
-  root.querySelector('#review-session').textContent = 'SSI EOD · Phiên '+data.session;
+  root.querySelector('#review-session').textContent = data.provisional?
+    'SSI trong phiên · '+data.session+' · Tạm tính đến '+stamp(data.evaluationTime)+' · EOD chính thức '+data.lastEod:
+    'SSI EOD · Phiên '+data.session;
+  renderSources();
   root.querySelector('#review-coverage').textContent = records.filter(r=>r.latest).length+'/'+data.members.length+
     ' mã có dữ liệu phiên này. '+eligible.length+' mã đủ điều kiện tính RV20.';
   root.querySelector('#review-alerts').textContent = eligible.length
@@ -287,7 +311,7 @@
   draw();
   }
   refreshEod();
-  window.addEventListener('hashchange',refreshEod);
-  document.addEventListener('visibilitychange',refreshEod);
+  window.addEventListener('hashchange',()=>{refreshEod();refreshBook();});
+  document.addEventListener('visibilitychange',()=>{refreshEod();refreshBook();});
   setInterval(refreshEod,60000);
 })();
