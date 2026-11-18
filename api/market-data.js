@@ -1,3 +1,4 @@
+const {gunzipSync}=require('node:zlib');
 // Read published SSI market data using the server-side Redis token.
 const symbolPattern = /^[A-Z0-9]{1,12}$/;
 const resolutions = ['15m', '1h', '4h'];
@@ -35,7 +36,10 @@ module.exports = async function (req, res) {
     if (!response.ok) throw Error('Store request failed');
     const {result, error} = await response.json();
     if (error) throw Error('Store read failed');
-    return result === null ? null : JSON.parse(result);
+    if (result === null) return null;
+    const value = JSON.parse(result);
+    return value?._ssi_encoding === 'gzip-base64-v1'
+      ? JSON.parse(gunzipSync(Buffer.from(value.data, 'base64')).toString('utf8')) : value;
   }
   try {
     let data;
