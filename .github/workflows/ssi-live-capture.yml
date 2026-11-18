@@ -1,8 +1,5 @@
 name: SSI Live Capture
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/ssi-live-capture.yml']
   workflow_dispatch:
     inputs:
       session:
@@ -47,6 +44,14 @@ jobs:
       - name: Capture order book
         working-directory: ssi-capture
         run: python -m scripts.capture_order_book
+      - name: Preserve raw research samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssi-raw-${{ github.run_id }}-${{ github.job }}
+          path: ssi-capture/data/order_book_capture/
+          retention-days: 90
+          if-no-files-found: warn
   afternoon:
     if: ${{ github.event_name == 'push' || github.event.schedule == '57 5 * * 1-5' || github.event.schedule == '7 6 * * 1-5' || inputs.session == 'afternoon' }}
     runs-on: ubuntu-latest
@@ -73,3 +78,11 @@ jobs:
       - name: Capture order book
         working-directory: ssi-capture
         run: python -m scripts.capture_order_book
+      - name: Preserve raw research samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssi-raw-${{ github.run_id }}-${{ github.job }}
+          path: ssi-capture/data/order_book_capture/
+          retention-days: 90
+          if-no-files-found: warn

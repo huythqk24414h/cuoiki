@@ -5,7 +5,7 @@ import time
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from scripts.market_store import publish, redis
+from scripts.market_store import encode_value, publish, redis
 from scripts.market_universe import (BASE_DAILY, refresh_directory, report_requests,
                                      request, select_symbols, stored)
 from src.eod_analytics import enrich_rows
@@ -154,7 +154,7 @@ def update(client, now):
             continue
 
         prior_bytes = sum(item.get("bytes", 3_000_000) for code, item in series.items() if code != symbol)
-        if prior_bytes + len(json.dumps(rows, separators=(",", ":")).encode()) > 90_000_000:
+        if prior_bytes + len(encode_value(json.dumps(rows, separators=(",", ":"))).encode()) > 90_000_000:
             raise ValueError("Daily storage budget reached; review Upstash usage before adding more symbols")
         # Stage the new value before moving the pointer. A failed pointer update leaves an expiring key.
         key = f"history:{now.strftime('%Y%m%d%H%M%S%f')}:{symbol}"

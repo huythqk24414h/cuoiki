@@ -6,6 +6,7 @@ on:
     paths: ['.github/workflows/ssi-intraday-index-board.yml', 'scripts/publish_intraday.py', 'src/ssi_client.py', 'src/intraday.py']
   schedule:
     - cron: '18 2 * * 1-5'
+    - cron: '23 3,5,6 * * 1-5'
 permissions:
   contents: read
 concurrency:
