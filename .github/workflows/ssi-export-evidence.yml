@@ -1,0 +1,27 @@
+name: SSI Export Saved Evidence
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: Saved checkpoint date (YYYY-MM-DD)
+        required: true
+        default: '2026-11-17'
+permissions:
+  contents: write
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      EXPORT_DAY: ${{ inputs.date }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-ssi.txt
+      - run: python -m scripts.archive_capture_release --checkpoints --date "$EXPORT_DAY"

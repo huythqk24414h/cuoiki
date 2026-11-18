@@ -13,7 +13,7 @@ on:
     - cron: '7 2 * * 1-5'
     - cron: '7 6 * * 1-5'
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: ssi-live-capture-${{ (github.event_name == 'push' || github.event.schedule == '57 5 * * 1-5' || github.event.schedule == '7 6 * * 1-5') && 'afternoon' || inputs.session || 'morning' }}
   cancel-in-progress: false
@@ -44,14 +44,13 @@ jobs:
       - name: Capture order book
         working-directory: ssi-capture
         run: python -m scripts.capture_order_book
-      - name: Preserve raw research samples
+      - name: Preserve raw research samples in Releases
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ssi-raw-${{ github.run_id }}-${{ github.job }}
-          path: ssi-capture/data/order_book_capture/
-          retention-days: 90
-          if-no-files-found: warn
+        working-directory: ssi-capture
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python -m scripts.archive_capture_release
   afternoon:
     if: ${{ github.event_name == 'push' || github.event.schedule == '57 5 * * 1-5' || github.event.schedule == '7 6 * * 1-5' || inputs.session == 'afternoon' }}
     runs-on: ubuntu-latest
@@ -78,11 +77,10 @@ jobs:
       - name: Capture order book
         working-directory: ssi-capture
         run: python -m scripts.capture_order_book
-      - name: Preserve raw research samples
+      - name: Preserve raw research samples in Releases
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ssi-raw-${{ github.run_id }}-${{ github.job }}
-          path: ssi-capture/data/order_book_capture/
-          retention-days: 90
-          if-no-files-found: warn
+        working-directory: ssi-capture
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python -m scripts.archive_capture_release
