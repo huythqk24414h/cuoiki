@@ -88,7 +88,12 @@
    const [bar]=rollup(bars,()=>0),day=bars[0].date.slice(0,10);
    const start=day+'T'+String(Math.floor(group.start/60)).padStart(2,'0')+':'+String(group.start%60).padStart(2,'0')+':00+07:00';
    const end=day+'T'+String(Math.floor(group.end/60)).padStart(2,'0')+':'+String(group.end%60).padStart(2,'0')+':00+07:00';
-   return {...bar,date:start,period_end:end,provisional:Date.parse(end)>now,session:undefined};
+   const expected=[];
+   for(let minute=group.start;minute<group.end;minute+=15){
+    if(minute<690||minute>=780)expected.push(minute);
+   }
+   const incomplete=bars.length<expected.length;
+   return {...bar,date:start,period_end:end,provisional:Date.parse(end)>now,incomplete,session:undefined};
   }).sort((a,b)=>a.date.localeCompare(b.date));
  }
 
@@ -142,6 +147,7 @@
      if(!row)return '';
      const lines=[row.symbol+' · '+labels[items[0].dataIndex]];
      if(row.session==='closing_auction'&&row.date.includes('T'))lines.push('ATC · Mốc đóng cửa SSI');
+     if(row.incomplete&&!row.provisional)lines.push('Kỳ thiếu dữ liệu nguồn');
      if(row.period_end)lines.push('Kết thúc kỳ '+row.period_end.slice(11,16)+' · Dữ liệu đến '+String(row.closed_at||row.date).slice(11,16));
      if(row.provisional)lines.push('Kỳ đang mở');
      for(const [name,key] of [['Mở cửa','open_vnd'],['Cao nhất','high_vnd'],['Thấp nhất','low_vnd'],['Đóng cửa','close_vnd'],['Khối lượng','volume_shares']])

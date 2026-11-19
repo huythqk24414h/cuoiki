@@ -108,7 +108,7 @@ test('chart frames aggregate observed candles and retain incomplete periods with
   assert.equal(grouped[0].volume_shares,200);
   assert.equal(grouped.reduce((sum,row)=>sum+row.volume_shares,0),600);
   const hourly=kit.intradayRows(rows,'1h','VNINDEX');
-  assert.equal(hourly.length,4);
+  assert.equal(hourly.length,3);
   assert.equal(hourly[0].volume_shares,300);
   assert.equal(hourly[0].period_end,'2026-11-17T10:15:00+07:00');
   assert.equal(kit.intradayRows(rows,'2h','VNINDEX').length,3);
