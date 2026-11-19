@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
@@ -22,12 +23,34 @@ def package(source, target):
             "sha256":hashlib.file_digest(target.open("rb"), "sha256").hexdigest()}
 
 
+def run_github(command):
+    for attempt in range(3):
+        result = subprocess.run(command)
+        if result.returncode == 0:
+            return
+        if attempt < 2:
+            time.sleep(5 * (attempt + 1))
+    raise subprocess.CalledProcessError(result.returncode, command)
+
+
+def prepare_release(day):
+    tag = "ssi-data-" + day
+    if subprocess.run(["gh", "release", "view", tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+        run_github(["gh", "release", "create", tag, "--target", "main", "--title", "SSI research data " + day,
+                    "--notes", "SSI evidence archives with SHA-256 manifests. Inspect each manifest for granularity and coverage."])
+    return tag
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--date", default=datetime.now(VN).date().isoformat())
     parser.add_argument("--checkpoints", action="store_true")
+    parser.add_argument("--prepare", action="store_true")
     args = parser.parse_args()
     day = date.fromisoformat(args.date).isoformat()
+    if args.prepare:
+        prepare_release(day)
+        return
     run = os.getenv("GITHUB_RUN_ID", "local") + "-" + os.getenv("GITHUB_RUN_ATTEMPT", "1")
     session = os.getenv("SSI_CAPTURE_SESSION", "export")
     folder = Path("data/research_exports") / day / (run + "-" + session)
@@ -76,13 +99,9 @@ def main():
         return
     manifest_path = folder / (run+"-"+session+"-manifest.json")
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    tag = "ssi-data-" + day
-    if subprocess.run(["gh", "release", "view", tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
-        subprocess.run(["gh", "release", "create", tag, "--target", os.environ["GITHUB_SHA"],
-                        "--title", "SSI research data " + day,
-                        "--notes", "SSI evidence archives with SHA-256 manifests. Inspect each manifest for granularity and coverage."], check=True)
-    subprocess.run(["gh", "release", "upload", tag, str(manifest_path),
-                    *(str(folder / entry["file"]) for entry in files)], check=True)
+    tag = prepare_release(day)
+    run_github(["gh", "release", "upload", tag, str(manifest_path),
+                *(str(folder / entry["file"]) for entry in files)])
     print(json.dumps({"date":day,"files":len(files),"raw_bytes":sum(f["source_bytes"] for f in files),
                       "compressed_bytes":sum(f["compressed_bytes"] for f in files),"release":tag}), flush=True)
 

@@ -41,6 +41,13 @@ jobs:
       - name: Install SSI SDK
         working-directory: ssi-capture
         run: python -m pip install -r requirements-ssi.txt
+      - name: Prepare research release before capture
+        continue-on-error: true
+        working-directory: ssi-capture
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python -m scripts.archive_capture_release --prepare
       - name: Capture order book
         working-directory: ssi-capture
         run: python -m scripts.capture_order_book
@@ -51,6 +58,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: python -m scripts.archive_capture_release
+      - name: Temporary compressed evidence backup
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssi-backup-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          path: |
+            ssi-capture/data/research_exports/**/*.gz
+            ssi-capture/data/research_exports/**/*manifest.json
+          retention-days: 2
+          if-no-files-found: warn
   afternoon:
     if: ${{ github.event_name == 'push' || github.event.schedule == '57 5 * * 1-5' || github.event.schedule == '7 6 * * 1-5' || inputs.session == 'afternoon' }}
     runs-on: ubuntu-latest
@@ -74,6 +91,13 @@ jobs:
       - name: Install SSI SDK
         working-directory: ssi-capture
         run: python -m pip install -r requirements-ssi.txt
+      - name: Prepare research release before capture
+        continue-on-error: true
+        working-directory: ssi-capture
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python -m scripts.archive_capture_release --prepare
       - name: Capture order book
         working-directory: ssi-capture
         run: python -m scripts.capture_order_book
@@ -84,3 +108,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: python -m scripts.archive_capture_release
+      - name: Temporary compressed evidence backup
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssi-backup-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          path: |
+            ssi-capture/data/research_exports/**/*.gz
+            ssi-capture/data/research_exports/**/*manifest.json
+          retention-days: 2
+          if-no-files-found: warn
