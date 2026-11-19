@@ -206,7 +206,7 @@
     const explanation=`${state.symbol} đóng cửa ${fmt(s.close_vnd,2)} đơn vị giá nguồn ngày ${dateVN(s.date)}. Khối lượng ${fmt(s.volume_shares,0)} KL nguồn${s.relative_volume20 == null ? '; chưa đủ dữ liệu so TB20.' : `, bằng ${fmt(s.relative_volume20,2)} lần TB20 phiên trước.`}`;
     window.dispatchEvent(new CustomEvent('eod-updated',{detail:{rows:state.rows,summary:s,meta:state.meta}}));
     text('#eod-insight',explanation); text('#analysis-insight',explanation);
-    const selectedSymbol=state.symbol,selectedDate=s.date;request('/api/market/insights?'+new URLSearchParams({symbol:selectedSymbol,date:selectedDate})).then(sheet=>{if(state.symbol!==selectedSymbol||state.summary?.date!==selectedDate)return;text('#eod-insight',sheet.paragraphs.join(' '));text('#analysis-insight',sheet.paragraphs.join(' '));}).catch(()=>{});
+    const selectedSymbol=state.symbol,selectedDate=s.date;request('/api/market/insights?'+new URLSearchParams({symbol:selectedSymbol,date:selectedDate})).then(sheet=>{if(state.symbol!==selectedSymbol||state.summary?.date!==selectedDate)return;text('#eod-insight',sheet.paragraphs.join(' '));}).catch(()=>{});
     text('#analysis-context',`${state.symbol} · ${dateVN(state.rows[0]?.date)}–${dateVN(s.date)} · ${state.rows.length} phiên · cùng bộ lọc Tổng quan. KPI là phiên cuối; đổi độ dài khoảng không đổi phiên cuối.`);
     text('#table-caption',`${state.symbol} · đơn vị giá nguồn · volume: đơn vị nguồn · ${state.meta.manifest.adjustment_policy}`);
   }
@@ -308,6 +308,12 @@
     text('#value-chart-note',open&&open.source_value_vnd==null?
       'SSI chưa có đủ trường value cho phần phiên đang mở. Giá trị cuối ngày vẫn xem được trên biểu đồ.':
       'Tổng trường value do SSI trả về trong phần đã quan sát. Đơn vị nguồn chưa xác minh là GTGD thực.');
+    const daily=analysisData?.key===String(params())?analysisData.dailyRows||[]:[];
+    const analysisRows=state.resolution==='1D'?data:daily;
+    if(window.SSIInterpretation){
+      const target=q('#analysis-insight');
+      target.replaceChildren(...window.SSIInterpretation(state.symbol,analysisRows).map(line=>node('p',line)));
+    }
     text('#analysis-live-scope',open?
       'Điểm có dấu * dùng nến SSI M15 đã đóng. RV20 tạm tính với TB20 phiên đã chốt; Volatility20 dùng giá gần nhất của phiên đang mở cùng 19 lợi suất trước.':
       'Phần trong phiên xuất hiện khi có nến SSI M15 và khoảng ngày cho phép.');
@@ -328,7 +334,14 @@
       const version=[key,payload.revision,payload.last_available_session,open?.closed_at,open?.volume_shares,open?.close_vnd,open?.source_value_vnd].join(':');
       if(version===analysisVersion)return;
       analysisVersion=version;
-      analysisData={key,payload};
+      let dailyRows;
+      if(state.resolution!=='1D'){
+        const dailyQuery=new URLSearchParams(key);dailyQuery.set('resolution','1D');dailyQuery.set('preview','1');
+        const daily=await request('/api/market/series?'+dailyQuery);
+        if(ticket!==analysisRequest||key!==String(params()))return;
+        dailyRows=daily.analysis_rows||daily.rows||[];
+      }
+      analysisData={key,payload,dailyRows};
       renderAnalysisCharts();
     }catch(error){
       if(ticket===analysisRequest&&key===String(params()))text('#analysis-live-scope','Tạm thời chưa đọc được cập nhật SSI. '+error.message);
