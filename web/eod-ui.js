@@ -8,6 +8,12 @@
   Object.assign(state,window.MarketState.value);
   let catalog=[], hasCoverage=false;
   let memberships={};
+  const followLabel=document.createElement('label'),followInput=document.createElement('input');
+  followInput.type='checkbox';followInput.checked=window.MarketState.value.followToday;
+  followLabel.append(followInput,document.createTextNode(' Theo hôm nay'));
+  q('#market-to').parentElement.append(followLabel);
+  followInput.addEventListener('change',()=>window.MarketState.set({followToday:followInput.checked}));
+  window.addEventListener('market-state-change',()=>{followInput.checked=window.MarketState.value.followToday;});
   function params(){const s=window.MarketState.value;return new URLSearchParams({symbol:state.symbol,range:state.range,scope:s.scope,resolution:s.resolution,period:s.period,to:s.to,...(s.range==='CUSTOM'&&s.from?{from:s.from}:{})});}
   function syncToolbar(){
     const s=window.MarketState.value;

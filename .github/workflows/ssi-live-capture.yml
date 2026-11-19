@@ -54,7 +54,7 @@ jobs:
   afternoon:
     if: ${{ github.event_name == 'push' || github.event.schedule == '57 5 * * 1-5' || github.event.schedule == '7 6 * * 1-5' || inputs.session == 'afternoon' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 205
+    timeout-minutes: 355
     env:
       SSI_CAPTURE_SESSION: afternoon
       SSI_PUBLISH_LIVE: ${{ vars.SSI_PUBLISH_LIVE }}

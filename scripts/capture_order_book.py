@@ -46,7 +46,7 @@ def main():
     windows = {"morning":(clock_time(9), clock_time(11, 30)),
                "afternoon":(clock_time(13), clock_time(14, 45))}
     opens, closes = windows[session]
-    earliest = clock_time(6) if session == "morning" else clock_time(11, 30)
+    earliest = clock_time(6) if session == "morning" else clock_time(9)
     if now.time() < earliest:
         if os.environ.get("GITHUB_EVENT_NAME") == "push":
             print("Deployment is before the afternoon scheduling window; regular schedule remains enabled.", flush=True)

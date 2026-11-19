@@ -54,7 +54,7 @@ await writeFile(app, source.replace(
 // New deployments must load the matching scripts even on a previously opened site.
 let pageHtml = await readFile(page, 'utf8');
 pageHtml=pageHtml.replace('<script src="/market-ui.js"', '<script src="/symbol-dossier.js" defer></script><script src="/market-ui.js"');
-for (const name of ['static-api.js','demo-login.js','welcome-fx.js','app.js','chart-kit.js','eod-ui.js','symbol-analysis.js','symbol-dossier.js','market-ui.js','quote-board.js','intraday-ui.js','vn30-brief.js']) {
+for (const name of ['static-api.js','demo-login.js','welcome-fx.js','app.js','market-state.js','chart-kit.js','eod-ui.js','symbol-analysis.js','symbol-dossier.js','market-ui.js','quote-board.js','intraday-ui.js','vn30-brief.js']) {
   const version = createHash('sha256').update(await readFile(new URL(name, output))).digest('hex').slice(0,12);
   pageHtml = pageHtml.replace(`src="/${name}"`, `src="/${name}?v=${version}"`);
 }
