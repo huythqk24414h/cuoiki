@@ -180,3 +180,6 @@ input,select,textarea{color-scheme:light}.demo-login{width:min(480px,calc(100vw 
 #vn30-review{margin:0 0 18px}.review-summary{padding-left:20px;line-height:1.8}.review-tools{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:14px 0}.review-tools h3{margin:0 auto 0 0}.review-tools label{display:grid;gap:4px}.review-tools input,.review-tools select{min-width:125px}.review-table{overflow:auto;max-height:360px}.review-proof{width:min(720px,94vw);max-height:85vh;border:1px solid #c3d0dd;border-radius:14px;background:#fff;color:#17304a;padding:22px}.review-proof::backdrop{background:#10223888}
 .chart-filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px}.chart-filters>label{flex:1 1 180px}.chart-filters select{width:100%}
 .liquidity-panel{margin-bottom:16px}.liquidity-panel li+li{margin-top:6px}
+
+.global-market > .toolbar > label.follow-today{flex:0 0 24px;max-width:24px;min-width:24px;display:flex;align-items:center;justify-content:center;align-self:flex-end;height:48px;margin:0;cursor:pointer}
+.global-market .follow-today input[type="checkbox"]{appearance:auto;width:16px;height:16px;min-width:16px;min-height:16px;max-height:16px;padding:0;margin:0;box-shadow:none;cursor:pointer;accent-color:var(--color-primary)}
