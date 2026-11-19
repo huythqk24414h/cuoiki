@@ -92,7 +92,7 @@ test('production board keeps the last two-sided quote across missing and older s
   await assert.rejects(read,/tạm thời không truy cập/);
 });
 
-test('chart frames aggregate genuine candles without bridging lunch or filling gaps', () => {
+test('chart frames aggregate observed candles and retain incomplete periods without inventing volume', () => {
   const window={addEventListener(){}};
   runInNewContext(readFileSync(require.resolve('../web/chart-kit.js'),'utf8'),{
     window, document:{documentElement:{}}, MutationObserver:class{observe(){}},
@@ -103,14 +103,18 @@ test('chart frames aggregate genuine candles without bridging lunch or filling g
   });
   const rows=[bar('09:15'),bar('09:30',12,11),bar('10:00'),bar('11:15'),bar('13:00'),bar('13:15')];
   const grouped=kit.intradayRows(rows,'30m','VNINDEX');
-  assert.equal(grouped.length,3);
+  assert.equal(grouped.length,4);
   assert.equal(grouped[0].date,'2026-11-17T09:15:00+07:00');
-  assert.equal(grouped[0].close_vnd,11);
   assert.equal(grouped[0].volume_shares,200);
-  assert.equal(grouped[1].date,'2026-11-17T11:15:00+07:00');
-  assert.equal(grouped[1].volume_shares,100);
-  assert.equal(grouped[2].date,'2026-11-17T13:00:00+07:00');
-  assert.equal(kit.intradayRows(rows,'2h','VNINDEX').length,1);
+  assert.equal(grouped.reduce((sum,row)=>sum+row.volume_shares,0),600);
+  const hourly=kit.intradayRows(rows,'1h','VNINDEX');
+  assert.equal(hourly.length,4);
+  assert.equal(hourly[0].volume_shares,300);
+  assert.equal(hourly[0].period_end,'2026-11-17T10:15:00+07:00');
+  assert.equal(kit.intradayRows(rows,'2h','VNINDEX').length,3);
+  assert.equal(kit.intradayRows(rows,'4h','VNINDEX').length,2);
+  assert.equal(kit.sourceFrame('1h'),'15m');
+  assert.equal(kit.sourceFrame('4h'),'15m');
   const year=kit.dailyRows([{date:'2026-10-31',close_vnd:'10'},{date:'2026-11-17',close_vnd:'11'}],'1Y');
   assert.equal(year[0].close_vnd,'11');
   assert.equal(year[0].open_vnd,null);

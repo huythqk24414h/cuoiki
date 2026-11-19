@@ -3,8 +3,8 @@
  const section=document.querySelector('#analysis'),alerts=document.querySelector('#alerts');
  const card=document.createElement('article');card.className='card';
  const title=document.createElement('h2');title.textContent='Theo dõi trong ngày · SSI';
- const select=document.createElement('select');select.setAttribute('aria-label','Khung nến nội ngày');
- for(const [v,t] of [['15m','15 phút'],['1h','1 giờ'],['4h','Theo buổi sáng/chiều']]){const o=document.createElement('option');o.value=v;o.textContent=t;select.append(o);}
+ const select=ChartKit.frameSelect();select.setAttribute('aria-label','Khung nến nội ngày');
+
  const status=document.createElement('p'),plot=document.createElement('div');plot.className='intraday-chart';
  const note=document.createElement('p');note.textContent='Tự kiểm tra local mỗi 5 giây; tải SSI tối đa mỗi 60 giây theo mã. Nến đang hình thành có thể đổi. 4H tách nghỉ trưa nên có thể thiếu kỳ. Giá/KL giữ đơn vị nguồn. Không dùng nến để dựng sổ lệnh.';
  const dateNote=document.createElement('p');dateNote.className='helper';dateNote.textContent='Nến nội phiên theo mã, khung nến và bộ lọc ngày phía trên.';
@@ -29,7 +29,7 @@
  const overviewPlot=document.createElement('div');overviewPlot.className='chart-stage';
  overviewPane.append(overviewStatus,overviewPlot);dailyPlot.after(overviewPane);
  const overviewNote=document.createElement('p');overviewNote.className='helper';
- overviewNote.textContent='Biểu đồ dùng bộ lọc ngày phía trên. H4 gộp theo buổi. Kỳ đang mở dùng nến SSI M15 đã đóng.';
+ overviewNote.textContent='Biểu đồ dùng bộ lọc ngày phía trên. OHLC và khối lượng gộp đúng khung đã chọn; kỳ đang mở cập nhật theo nến SSI M15 mới.';
  overviewPane.append(overviewNote);
  const sessionStamp=document.createElement('p');sessionStamp.className='helper';
  document.querySelector('.snapshot-banner').after(sessionStamp);
@@ -104,10 +104,16 @@
   busy=true;const symbol=window.MarketState.value.symbol||'SSI',resolution=select.value;
   try{
    if(page==='analysis'){
-    const r=await request('/api/market/intraday?'+new URLSearchParams({symbol,resolution}));
+    const r=await request('/api/market/intraday?'+new URLSearchParams({symbol,resolution:'15m'}));
     if(symbol!==(window.MarketState.value.symbol||'SSI')||resolution!==select.value)return;
     const market=window.MarketState.value;
-    const rows=ChartKit.filteredCandles(ChartKit.intradayRows(r.rows,resolution,symbol),market);
+    let rows;
+    if(ChartKit.intradayFrame(resolution))rows=ChartKit.filteredCandles(ChartKit.intradayRows(r.rows,resolution,symbol),market);
+    else {
+      const daily=await request('/api/market/series?'+new URLSearchParams({symbol,resolution:'1D',range:market.range,to:market.to,...(market.range==='CUSTOM'&&market.from?{from:market.from}:{})}));
+      if(resolution!==select.value||symbol!==window.MarketState.value.symbol)return;
+      rows=ChartKit.dailyRows(ChartKit.withOpenDay(daily.rows||[],r.rows||[],symbol,market.range==='CUSTOM'?market.to:null),resolution);
+    }
     status.textContent=`${symbol} · ${rows.length} nến · Bộ lọc ${ChartKit.filterLabel(market)} · Nến cuối trong khoảng ${vn(rows.at(-1)?.closed_at||rows.at(-1)?.date)} · Lần tải ${vn(r.retrieved_at)}`;
     if(!chart)chart=echarts.init(plot);
     ChartKit.drawFinancial(chart,rows,{zoom:ChartKit.financialZoom(chart)});

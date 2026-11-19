@@ -3,7 +3,7 @@
  const charts=new Map(), priceTypes=new WeakMap();
  const types=[['candlestick','Nến'],['hollow','Nến rỗng'],['bar','Thanh OHLC'],['line','Đường'],['area','Vùng'],['baseline','Đường cơ sở']];
  const frames=[['15m','M15 · 15 phút'],['30m','M30 · 30 phút'],['1h','H1 · 1 giờ'],
-  ['2h','H2 · 2 giờ'],['4h','H4 · theo buổi'],['1D','D · Ngày'],['1W','W · Tuần'],
+  ['2h','H2 · 2 giờ'],['4h','H4 · 4 giờ'],['1D','D · Ngày'],['1W','W · Tuần'],
   ['1M','M · Tháng'],['1Q','Q · Quý'],['1Y','Y · Năm']];
  const intradayFrame=frame=>['15m','30m','1h','2h','4h'].includes(frame);
  function filteredCandles(rows,{range,from,to}){
@@ -67,39 +67,38 @@
  function intradayRows(rows,frame,symbol){
   const source=rows.map(row=>({date:row.timestamp,symbol,closed_at:row.closed_at,session:row.session,
    open_vnd:row.open,high_vnd:row.high,low_vnd:row.low,close_vnd:row.close,volume_shares:row.volume}));
-  const length=frame==='30m'?30:frame==='2h'?120:0;
+  const length={'30m':30,'1h':60,'2h':120,'4h':240}[frame];
   if(!length)return source;
-  // A grouped candle must start on the exchange's session grid and finish at
-  // its own boundary, including shorter buckets immediately before lunch or close.
-  const morning=['HNXINDEX','UPCOMINDEX'].includes(symbol)?540:555;
-  const close=symbol==='UPCOMINDEX'?900:870;
+  const opening=['HNXINDEX','UPCOMINDEX'].includes(symbol)?540:555;
+  const closing=symbol==='UPCOMINDEX'?900:885;
   const groups=new Map();
   for(const row of source){
    const minute=Number(row.date.slice(11,13))*60+Number(row.date.slice(14,16));
-   const anchor=minute<690?morning:780, end=minute<690?690:close;
-   if(minute<anchor||minute>=end)continue;
+   if(minute<opening||minute>=closing)continue;
+   const anchor=frame==='4h'?opening:minute<690?opening:780;
+   const sessionEnd=frame==='4h'?closing:minute<690?690:closing;
    const start=anchor+Math.floor((minute-anchor)/length)*length;
-   const day=row.date.slice(0,10),key=day+':'+start;
-   if(!groups.has(key))groups.set(key,{rows:[],start,end:Math.min(start+length,end)});
-   groups.get(key).rows.push({row,minute});
+   const key=row.date.slice(0,10)+':'+start;
+   if(!groups.has(key))groups.set(key,{rows:[],start,end:Math.min(start+length,sessionEnd)});
+   groups.get(key).rows.push(row);
   }
-  const result=source.filter(row=>row.session==='closing_auction');
-  for(const group of groups.values()){
-   const expected=(group.end-group.start)/15;
-   if(group.rows.length!==expected||!group.rows.every(({minute},i)=>minute===group.start+i*15))continue;
-   const bars=group.rows.map(({row})=>row);
-   const [bar]=rollup(bars,()=>0);
-   result.push({...bar,date:bars[0].date});
-  }
-  return result.sort((a,b)=>a.date.localeCompare(b.date));
+  const now=Date.now();
+  return [...groups.values()].map(group=>{
+   const bars=group.rows.sort((a,b)=>a.date.localeCompare(b.date));
+   const [bar]=rollup(bars,()=>0),day=bars[0].date.slice(0,10);
+   const start=day+'T'+String(Math.floor(group.start/60)).padStart(2,'0')+':'+String(group.start%60).padStart(2,'0')+':00+07:00';
+   const end=day+'T'+String(Math.floor(group.end/60)).padStart(2,'0')+':'+String(group.end%60).padStart(2,'0')+':00+07:00';
+   return {...bar,date:start,period_end:end,provisional:Date.parse(end)>now,session:undefined};
+  }).sort((a,b)=>a.date.localeCompare(b.date));
  }
+
  function destroy(target){const old=charts.get(target);if(old){old.remove?.();old.dispose?.();charts.delete(target);}target.replaceChildren();}
  const displayNumber=new Intl.NumberFormat('vi-VN',{maximumFractionDigits:4});
  const ohlcTypes=['candlestick','hollow','bar'];
  function drawFinancial(chart,rows,{type='candlestick',unit='Giá nguồn',volumePane=true,price=true,volume=true,zoom}={}){
   const green='#08764C',red='#BA2540',blue='#236ba7';
   const stacked=volumePane&&volume&&rows.some(row=>Number.isFinite(number(row.volume_shares)));
-  const labels=rows.map(row=>String(row.closed_at||row.date).slice(0,16).replace('T',' '));
+  const labels=rows.map(row=>String(row.date?.includes('T')?row.date:row.closed_at||row.date).slice(0,16).replace('T',' '));
   const quotes=rows.map(row=>hasOHLC(row)?[row.open_vnd,row.close_vnd,row.low_vnd,row.high_vnd].map(Number):[null,null,null,null]);
   const first=number(rows.find(row=>positive(row.close_vnd))?.close_vnd);
   const series=[];
@@ -143,6 +142,7 @@
      if(!row)return '';
      const lines=[row.symbol+' · '+labels[items[0].dataIndex]];
      if(row.session==='closing_auction'&&row.date.includes('T'))lines.push('ATC · Mốc đóng cửa SSI');
+     if(row.period_end)lines.push('Kết thúc kỳ '+row.period_end.slice(11,16)+' · Dữ liệu đến '+String(row.closed_at||row.date).slice(11,16));
      if(row.provisional)lines.push('Kỳ đang mở');
      for(const [name,key] of [['Mở cửa','open_vnd'],['Cao nhất','high_vnd'],['Thấp nhất','low_vnd'],['Đóng cửa','close_vnd'],['Khối lượng','volume_shares']])
       lines.push(name+'  '+format(row[key]));
@@ -210,7 +210,7 @@
  }
  window.ChartKit={render,destroy,frameSelect,intradayFrame,intradayRows,dailyRows,withOpenDay,drawFinancial,financialZoom,filteredCandles,filterLabel,
   refreshMs:()=>window.StaticLiquidity?60000:5000,
-  sourceFrame:frame=>frame==='30m'||frame==='2h'?'15m':frame};
+  sourceFrame:frame=>intradayFrame(frame)?'15m':frame};
  window.addEventListener('resize',()=>charts.forEach(c=>{if(c.getOption)c.resize();}));
  new MutationObserver(()=>window.dispatchEvent(new CustomEvent('chart-theme-change'))).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 })();
