@@ -1,0 +1,29 @@
+name: SSI Chart Watch
+on:
+  schedule:
+    - cron: '11,26 2 * * 1-5'
+    - cron: '47 5 * * 1-5'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ssi-chart-watch.yml'
+permissions:
+  contents: read
+  actions: write
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    concurrency:
+      group: ssi-chart-watch-${{ github.event.schedule == '47 5 * * 1-5' && 'afternoon' || 'morning' }}
+      cancel-in-progress: false
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      SSI_WATCH_SESSION: ${{ github.event.schedule == '47 5 * * 1-5' && 'afternoon' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m scripts.watch_session_collectors

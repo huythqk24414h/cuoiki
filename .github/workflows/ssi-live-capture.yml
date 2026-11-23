@@ -118,20 +118,3 @@ jobs:
             ssi-capture/data/research_exports/**/*manifest.json
           retention-days: 2
           if-no-files-found: warn
-
-  chart-watch:
-    runs-on: ubuntu-latest
-    timeout-minutes: 345
-    permissions:
-      contents: read
-      actions: write
-    env:
-      GITHUB_TOKEN: ${{ github.token }}
-      SSI_WATCH_SESSION: ${{ (github.event.schedule == '57 5 * * 1-5' || github.event.schedule == '7 6 * * 1-5' || inputs.session == 'afternoon') && 'afternoon' || 'morning' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Keep chart collectors active throughout capture
-        run: python -m scripts.watch_session_collectors

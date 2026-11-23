@@ -41,3 +41,9 @@ class CollectorRecoveryTests(unittest.TestCase):
         with patch("scripts.reconcile_collectors.active", return_value=False), patch("scripts.reconcile_collectors.github", return_value=failed) as dispatch:
             self.assertEqual(reconcile(datetime(2026,11,18,9,0,tzinfo=VN)), [])
             self.assertTrue(all(len(call.args) == 1 for call in dispatch.call_args_list))
+
+    def test_chart_watch_recovers_charts_without_dispatching_order_book(self):
+        with patch("scripts.reconcile_collectors.active", return_value=False), patch("scripts.reconcile_collectors.github", return_value={"workflow_runs":[]}) as request:
+            started = reconcile(datetime(2026,11,24,9,20,tzinfo=VN), charts_only=True)
+        self.assertEqual(started, ["ssi-intraday.yml", "ssi-intraday-index-board.yml"])
+        self.assertTrue(all("ssi-live-capture" not in call.args[0] for call in request.call_args_list))

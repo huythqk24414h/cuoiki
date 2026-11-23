@@ -1,4 +1,4 @@
-"""Keep chart collectors running alongside the SSI capture session."""
+"""Keep chart collectors running throughout the trading session."""
 import os
 import time
 from datetime import datetime, time as clock
@@ -16,7 +16,7 @@ def main():
         now = datetime.now(VN)
         if now.time() >= clock(9,17):
             try:
-                reconcile(now)
+                reconcile(now, charts_only=True)
             except Exception as error:
                 print("Collector check failed; retrying:", type(error).__name__, flush=True)
         for _ in range(3):

@@ -29,18 +29,18 @@ def active(workflow, session=None):
     return False
 
 
-def reconcile(now):
+def reconcile(now, *, charts_only=False):
     if now.weekday() >= 5:
         return []
     clock = now.time()
     session = "morning" if time(7) <= clock < time(11,25) else "afternoon" if time(11,35) <= clock < time(14,40) else None
     jobs = []
-    if session:
+    if session and not charts_only:
         jobs.append(("ssi-live-capture.yml", {"session":session}, session))
     if time(9,17) <= clock < time(14,48):
         jobs.extend([("ssi-intraday.yml", {"follow_session":True}, None),
                      ("ssi-intraday-index-board.yml", {}, None)])
-    if time(16,10) <= clock < time(19):
+    if not charts_only and time(16,10) <= clock < time(19):
         with urlopen("https://cuoiki-jet.vercel.app/api/market-data?kind=history", timeout=15) as response:
             history = json.load(response)
         if history.get("symbols", {}).get("VNINDEX", {}).get("last", "") < now.date().isoformat():
