@@ -1,58 +1,56 @@
-# LiquidityLab · local, chỉ đọc SSI
+# LiquidityLab
 
-Nhấp đúp MO_LIQUIDITY_LAB.cmd để chạy. Màn hình đầu là ảnh LiquidityLab với hiệu ứng; bấm Đăng nhập góc phải để mở hộp chính giữa. Tài khoản minh họa công khai: LiquidityLab / 123456789. Sau đăng nhập hiện avatar LL, tên LiquidityLab và Đăng xuất. Đây là minh họa local, không bảo vệ API và không phải tài khoản SSI.
+LiquidityLab is a read-only academic tool for comparing traded volume with displayed liquidity. It uses SSI FastConnect Data according to the instructor's updated requirement. The public web app shows OHLCV, indices, relative volume and saved order-book observations. The local manual calculator works with user-supplied books and simulates a buy or sell across up to three visible levels.
 
-Chín hiệu ứng: laser trái→phải, gợn sóng tâm→ngoài, hạt phải→trái, tia ngoài→tâm, sóng dâng, lưới quét xuống, vệt sáng mềm, nét sáng ngắn, hạt sáng hội tụ nhẹ quanh logo. Mỗi pha 6 giây, vòng 54 giây lặp đến khi đăng nhập. Có tạm dừng, giảm chuyển động và dừng khi tab ẩn. Ô nhập đứng yên, không tự mở hộp đăng nhập. Không có quét bảo mật thật. Workspace sau đăng nhập dùng nền sáng xanh xám, mặt trắng và điểm nhấn đỏ; không còn bốn theme/phím 1–4.
+## Run and verify
 
-## Lịch sử 2022–2026
+From this folder, use Python 3.12+ and a current Node.js runtime:
 
-Đã tải và kiểm chứng 1.224.178 quan sát EOD, truy vấn 01/01/2022–05/11/2026. Có 1.968 mã/mục có dữ liệu dùng được: 1.956 SUCCESS và 12 PARTIAL; 108 NO_HISTORY; VN50 GROWTH lỗi SSI 400006. 722 dòng lỗi/xung đột được cách ly. Đây là gần năm năm theo các năm lịch, chưa đủ năm năm tròn.
+```sh
+python run.py --port 8792
+python -m unittest discover -s tests -v
+node --test tests/*.test.cjs
+node scripts/build_vercel_demo.mjs
+```
 
-Nguồn ở data/ssi_history_20220101_20261105/: raw, symbols, index_ohlc, checkpoint, quality và checksum. config/history_active.json chỉ trỏ tới bản PASS; file đọc phải khớp hash trong quality. Snapshot sáu mã cũ giữ nguyên. 3Y/5Y/MAX và ngày tùy chọn đã được nối vào API và UI.
+Open `http://127.0.0.1:8792`. The local server and calculator need only the Python standard library. On Windows, `MO_LIQUIDITY_LAB.cmd` also opens the app. `LiquidityLab` / `123456789` is the public demo form, with no user authentication or account access. A clean copy can run the calculator and synthetic tests. Historical SSI panels require the corresponding saved data folders. Missing-source panels must be read as unavailable.
 
-VNINDEX/VN30/HNXINDEX/UPCOMINDEX lấy từ OHLC chỉ số chính thức; UPCOM dùng mã nguồn HNXUPCOMINDEX. Mỗi chỉ số đối chiếu khớp 207/207 ngày chung với indexSummary cũ. Chênh lệch điểm/% tính từ đóng cửa so phiên trước.
+For authorized SSI collection, install `requirements-ssi.txt` and configure the variables in `.env.example` through the environment or a private `.env`. The production workflows use GitHub Secrets and the public demo reads the market API on Vercel. REST collection is restricted to the five market-data endpoints in `src/ssi_client.py`; the SDK also authenticates and subscribes to the SSI DATA feed.
 
-Giới hạn: danh mục hiện tại không gồm tất cả mã từng niêm yết từ 2022. Nội dung đối chiếu raw; lịch phiên, đơn vị toàn danh mục và chính sách điều chỉnh chưa xác minh đầy đủ. Giữ số nguồn, không tự đổi đơn vị hoặc gọi source.value là giá trị khớp thật. Không công bố tổng hợp thị trường khi mẫu số lịch sử chưa xác minh. EOD không thay sổ lệnh nội ngày cho H1.
+## Data and provenance
 
-## Kết quả kiểm thử mới nhất
+| Component | What it uses |
+| --- | --- |
+| `src/`, `scripts/` | SSI mapping and validation, candle publication, book capture, finance and research |
+| `web/`, `api/`, `demo/` | Local and Vercel UI, read-only production API, browser adapter |
+| `config/` | Historical snapshot pointer, pilot protocol, SSI unit-contract template |
+| `data_sample/` | Synthetic SSI-shaped catalogue for HTTP/SSE tests only |
+| `data/` | Local SSI snapshots and research archives outside Git |
 
-- Python 107/107 PASS, gồm HTTP local thật, lịch sử, chỉ số, checksum.
-- JavaScript 22/22 PASS, gồm đăng nhập, vòng hiệu ứng, reduced-motion, pause và tab ẩn; dùng DOM/canvas doubles.
-- HTTP tại8792 PASS cho trang, ảnh, script và API lịch sử.
-- Browser interaction/screenshot/độ mượt/bố cục thực: BLOCKED do chính sách trình duyệt từ chối localhost. Kiểm thử logic không thay nghiệm thu hình ảnh.
+Production OHLCV uses closed SSI minute observations. M15 refreshes at market checkpoints and the chart aggregates other periods from observed data. Daily and longer charts may include a provisional current observation, and the official EOD history is published separately. The chart watch has an independent schedule. The book collector preserves one-second sampled states and SSI event logs where available. A saved checkpoint carries the most recent observed books, with lower time granularity than those logs.
 
-Bằng chứng: docs/HISTORY_2022_REPORT.json, docs/WELCOME_HISTORY_HTTP.json, docs/WELCOME_HISTORY_REPORT.md, docs/latest_python_tests.txt và docs/latest_js_tests.txt. Báo cáo cũ mô tả các mốc trước, không phải nghiệm thu hiện tại.
+Check any saved archive directory that also contains its manifest by running:
 
-Chạy kiểm thử: python -m unittest discover -s tests; node --test tests/*.test.cjs. Có thể đặt TEMP/TMP vào thư mục được phép ghi nếu môi trường hạn chế.
+```sh
+python -m scripts.audit_book_archives data/research_exports
+```
 
-## An toàn và đóng gói
+The archive audit checks hashes and reports per-symbol coverage in continuous trading windows. Collector freshness and session flags do not certify SSI units or research eligibility. Keep externally sourced datasets separate until provenance, permitted use, timestamp semantics and quality have been verified. SSI data may be subject to redistribution terms.
 
-Bản local không gửi lệnh và đọc dữ liệu từ tệp. Đặt khóa SSI của bản local trong .env. Bản production dùng GitHub Secrets để chạy workflow và Redis để lưu dữ liệu. scripts/build_submission.py quét bí mật và loại .env, SDK, dữ liệu riêng khỏi ZIP; máy khác cần tự cấu hình và thu dữ liệu theo quyền SSI. Không phân phối dữ liệu SSI hoặc thông tin xác thực khi chưa được phép. ZIP source không chứa dataset riêng.
+The offline research runner currently reads event logs prepared in `data/live_snapshots/`. The archive inventory remains a separate check before selecting those inputs. The archive contains both capture timestamps (`sampled_at`, one-second sampling grid) and, where available, source and receive timestamps (`event_time`, `received_at`). Quote prices and quantities remain in SSI source units until the unit contract has supporting evidence. Checkpoints cannot recover the quote sequence between saved times.
 
+## Financial interpretation
 
-## Cập nhật nội ngày ngày 06/11/2026
+- Relative volume divides current observed volume by the previous 20 completed sessions' mean. Values such as 2× and 0.5× identify double or half the recent reference for description. An intraday numerator is provisional and is compared with full-day historical volume.
+- The exit scenario uses 100,000 shares and participation of 5% as explicit scenario inputs. Estimated sessions equal shares divided by the product of average volume and participation. At 2.5%, 5% or 10% the scenario respectively gives twice, the same or half the 5% estimate for a fixed average volume. It does not measure displayed depth.
+- The 60-second observation rule uses a prior 10th-percentile depth reference and checks whether low depth persists for 15 seconds. These are pilot choices for a low-tail and a persistence filter. Candidate quantiles and time windows must be compared on development days and finalized before evaluating reserved days. The protocol and SSI unit contract have separate gates.
+- Manual sweep uses the best displayed opposite-side prices first. VWAP uses the filled quantity. The UI pairs full-order midpoint slippage with snapshot fill fraction and suppresses full-order slippage when shares remain. It does not estimate fill frequency, queue priority, fees, round-lot constraints or the market response to a real order.
 
-Trang Phân tích có mục Theo dõi trong ngày với 15 phút/1 giờ/4 giờ. Các khung lấy từ SSI 1m thật, tách nghỉ trưa; không dựng từ EOD. Trình duyệt đọc local mỗi5giây, bộ tải SSI mỗi mã tối đa1lần/60giây, dùng chung phiên DATA. API trả lần tải và thời gian nguồn riêng; đây là nến cập nhật định kỳ, không phải cam kết realtime tick-by-tick.
+The production data notes and limitations are in [docs/production-ssi-coverage.md](docs/production-ssi-coverage.md). Treat the application as an academic analysis tool, not investment advice. The research evaluation remains a pilot and H1 is `NOT_TESTED` until the data, unit contract and locked protocol support a defensible out-of-sample comparison.
 
-Trang Cảnh báo có bộ quan sát độ sâu60giây, lấy mẫu1giây và xác nhận đợt thấp15giây sau khi cửa sổ đủ dữ liệu. Chưa phải dự báo H1; thiếu hợp đồng xác minh đơn vị thì BLOCKED, không tạo xác suất. Nhật ký ở data/depth_watch; API /api/market/depth-warning. Nến ở data/intraday và /api/market/intraday.
+### Dependencies and notices
 
-Kiểm thử mới:111 Python,22 JavaScript đạt. Gói liquidity-lab_LOCAL_SAMPLE.zip chứa snapshot SSI nhỏ để kiểm tra offline, không .env; thử bản giải nén trả207dòng SSI. Gói chỉ dành sử dụng theo quyền SSI, không phải kho đầy đủ2022–2026. Không tự phân phối công khai. Xem docs/INTRADAY_60S_HTTP.json.
-
-## Demo tinh tren Vercel
-
-Build: `node scripts/build_vercel_demo.mjs`. Vercel serves `public-demo/`.
-The demo includes closing prices and an order-book calculator. Its initial
-snapshot is labeled simulated. The full local dashboard is launched separately.
-
-Import this repository into Vercel with its root left at the repository root.
-On GitHub, configure `SSI_API_KEY` and `SSI_API_SECRET` as Actions secrets.
-Set `SSI_PUBLISH_EOD=true` as an Actions variable after confirming that the
-selected closing prices may be shown on the demo. Set `SSI_EOD_SYMBOLS` to
-override the default SSI,HPG,FPT list.
-
-In Vercel, create a Deploy Hook for the production branch and save its URL as
-the GitHub Actions secret `VERCEL_DEPLOY_HOOK`. The workflow **SSI Demo
-Closing Prices** runs at 16:37 Vietnam time on weekdays or from **Run workflow**.
-It validates a complete batch for the current session before publishing.
-A failed fetch keeps the previously published snapshot. Raw order-book files
-are handled separately by **SSI Live Capture**.
+- [KaTeX](https://github.com/KaTeX/KaTeX), [bundled licence](web/vendor/katex/LICENSE.txt)
+- [Apache ECharts](https://echarts.apache.org/), [bundled licence](web/vendor/echarts-LICENSE.txt) and [NOTICE](web/vendor/echarts-NOTICE.txt)
+- [Lightweight Charts](https://github.com/tradingview/lightweight-charts), [bundled licence](web/vendor/lightweight-charts-LICENSE.txt) for the retained vendor file
+- SSI FastConnect Python SDK (`ssi-sdk`), version in `requirements-ssi.txt`. Consult the provider for SDK and data usage terms.
