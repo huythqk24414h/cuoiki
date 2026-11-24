@@ -1,23 +1,44 @@
 # LiquidityLab
 
-Công cụ phân tích học thuật dùng SSI FastConnect Data theo yêu cầu của giảng viên. Web hiển thị giá, khối lượng, chỉ số, RV20 và bản chụp sổ lệnh. Công cụ nhập tay tính các chỉ số và mô phỏng quét tối đa ba mức giá.
+**[Mở LiquidityLab trên web](https://cuoiki-jet.vercel.app/)**
 
-## Chạy và kiểm thử
+Công cụ học thuật phân tích thanh khoản cổ phiếu Việt Nam từ dữ liệu SSI FastConnect Data. Ứng dụng hiển thị giá, khối lượng, chỉ số, RV20 và sổ lệnh. Công cụ nhập tay cho phép kiểm tra công thức và mô phỏng quét tối đa ba mức giá.
 
-Dùng Python 3.12 trở lên và Node.js. Trên Windows có thể mở bằng `MO_LIQUIDITY_LAB.cmd`. Sau khi chạy lệnh đầu, mở http://127.0.0.1:8792. Biểu mẫu demo dùng `LiquidityLab` / `123456789`.
+## 1. Xem bản web
+
+1. Mở liên kết ở đầu trang bằng trình duyệt.
+2. Bấm **Đăng nhập**, nhập tên mẫu **LiquidityLab** và mật khẩu mẫu **123456789**. Đây là tài khoản demo công khai, không cần tài khoản SSI.
+3. Vào **Tổng quan** để xem giá và khối lượng, hoặc **Sổ lệnh → Nhập sổ lệnh** để thử phép tính ở mục 3.
+
+Người xem bản web chỉ cần trình duyệt và Internet. Các bước dưới đây dành cho người muốn chạy hoặc kiểm tra mã nguồn.
+
+## 2. Tải và chạy mã nguồn
+
+Cài Git và Python 3.12. Cài thêm Node.js 24 nếu muốn chạy kiểm thử giao diện hoặc tạo bản dựng Vercel. Mở PowerShell trên Windows hoặc Terminal trên macOS/Linux.
+
+**Bước 1. Tải mã nguồn và kiểm tra Python**
+
+```sh
+git clone https://github.com/huythqk24414h/cuoiki.git
+cd cuoiki
+python --version
+```
+
+Dòng cuối cần hiện `Python 3.12.x`. Nếu máy dùng `py -3.12` trên Windows hoặc `python3.12` trên macOS/Linux, thay `python` bằng lệnh tương ứng ở các bước sau.
+
+**Bước 2. Chạy máy chủ từ tệp `run.py`**
 
 ```sh
 python run.py --port 8792
-python -m unittest discover -s tests -v
-node --test tests/*.test.cjs
-node scripts/build_vercel_demo.mjs
 ```
 
-Bản tải sạch chạy được công cụ nhập tay và kiểm thử dùng dữ liệu giả lập. Các mục lịch sử cần bản chụp SSI tương ứng trong `data/`. Để thu dữ liệu bằng tài khoản được cấp quyền, cài `requirements-ssi.txt` và cấu hình theo `.env.example`. Các quy trình GitHub đọc thông tin kết nối từ GitHub Secrets. Máy khách SSI chỉ gọi các điểm cuối đọc dữ liệu trong `src/ssi_client.py`.
+Khi terminal in địa chỉ máy chủ, giữ cửa sổ đó mở và vào [http://127.0.0.1:8792](http://127.0.0.1:8792) trên trình duyệt. Đăng nhập bằng tài khoản mẫu ở mục 1. Nhấn **Ctrl+C** trong terminal để dừng máy chủ.
 
-## Thử nhập sổ lệnh ngày 25/11/2026
+`run.py` phục vụ `web/index.html` và các tệp giao diện, đồng thời nhận yêu cầu tính toán tại `/api/calculate`. Phép tính phía Python nằm trong `src/finance.py`. Phần mô phỏng quét ba mức nằm trong `web/calculator-core.js`. Chạy máy chủ và thử nhập tay chỉ cần thư viện chuẩn Python. Các trang lịch sử SSI ở bản cục bộ cần dữ liệu tương ứng trong `data/`, vốn được lưu ngoài Git.
 
-Vào **Sổ lệnh → Nhập sổ lệnh**, đặt tên **FPT-MAU**. Đây là ví dụ giả lập, giá tính bằng đồng/cổ phiếu, khối lượng tính bằng cổ phiếu. Có thể để trống thời gian để dùng giờ bấm tính.
+## 3. Tái lập một kết quả
+
+Ở bản web hoặc bản chạy cục bộ, vào **Sổ lệnh → Nhập sổ lệnh**, điền mã **FPT-MAU** và nhập các số nguyên bên dưới. Đây là dữ liệu giả lập. Giá tính bằng đồng/cổ phiếu và khối lượng tính bằng cổ phiếu. Để trống thời gian nếu muốn dùng thời điểm bấm tính.
 
 | Mức | Giá mua | KL mua | Giá bán | KL bán |
 | --- | ---: | ---: | ---: | ---: |
@@ -25,43 +46,70 @@ Vào **Sổ lệnh → Nhập sổ lệnh**, đặt tên **FPT-MAU**. Đây là 
 | 2 | 46950 | 300 | 47100 | 300 |
 | 3 | 46900 | 500 | 47150 | 500 |
 
-Bấm **Tính toán**. Chênh lệch giá tốt nhất là 50 đồng/cp, giá giữa 47.025 đồng/cp. Mở **Mô phỏng quét tối đa ba mức**, chọn **Mua** và thử hai lượng:
+Bấm **Tính toán**. Chênh lệch giữa hai giá tốt nhất là **50 đồng/cp**, giá giữa là **47.025 đồng/cp**. Mở **Mô phỏng quét tối đa ba mức**, chọn **Mua**, nhập khối lượng rồi bấm **Mô phỏng**.
 
-- **300 cp**. Khớp đủ, giá bình quân 47.066,67 đồng/cp, trượt giá khoảng 8,86 bps.
-- **1.200 cp**. Khớp 1.000 cp (83,33%), còn 200 cp. Giá bình quân phần khớp 47.115 đồng/cp. Công cụ bỏ trống trượt giá toàn lệnh.
+| Khối lượng | Kết quả cần thấy |
+| ---: | --- |
+| 300 cp | Khớp đủ. Giá bình quân khoảng 47.066,67 đồng/cp, trượt giá khoảng 8,86 bps so với giá giữa. |
+| 1.200 cp | Khớp 1.000 cp (83,33%), còn 200 cp. Giá bình quân phần khớp là 47.115 đồng/cp. Trượt giá toàn lệnh để trống. |
 
-Nếu thử bằng sổ FPT thực tế, chép ba mức mua và bán tại cùng thời điểm, chỉ quy đổi sau khi xác nhận đơn vị nguồn.
+Khi thử bằng sổ FPT thực tế, chép ba mức mua và bán cùng một thời điểm và kiểm tra đơn vị nguồn trước khi nhập. Kết quả mô phỏng chỉ dựa trên lượng hiển thị tại thời điểm chụp.
 
-## Dữ liệu và nguồn gốc
+## 4. Chạy kiểm thử và tạo bản dựng
 
-| Thư mục | Nội dung |
-| --- | --- |
-| `src/`, `scripts/` | Đọc và kiểm tra SSI, công bố nến, thu sổ lệnh, tính toán và nghiên cứu |
-| `web/`, `api/`, `demo/` | Giao diện cục bộ và Vercel, API chỉ đọc và phần kết nối trình duyệt |
-| `config/` | Tham chiếu bản chụp lịch sử, giao thức thí điểm và mẫu xác minh đơn vị SSI |
-| `data_sample/` | Danh mục giả lập theo cấu trúc SSI dành cho kiểm thử HTTP/SSE |
-| `data/` | Bản chụp SSI và hồ sơ nghiên cứu lưu ngoài Git |
+Chạy từ thư mục `cuoiki`. Với kiểm thử Python, tạo môi trường ảo để cài riêng các phụ thuộc.
 
-Biểu đồ dùng nến một phút đã đóng từ SSI. Nến M15 làm mới theo mốc giao dịch. Các khung dài hơn có thể gồm kỳ đang mở. Lịch sử cuối ngày chính thức được công bố riêng. Giám sát biểu đồ có lịch độc lập với bộ thu sổ lệnh. Bộ thu ghi mẫu mỗi giây và lưu nhật ký sự kiện SSI khi có.
+**Windows (PowerShell)**
 
-```sh
-python -m scripts.audit_book_archives data/research_exports
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-research.txt
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Lệnh trên kiểm mã băm và báo độ phủ theo mã trong phiên khớp liên tục. Cần xác minh nguồn gốc, quyền sử dụng, ý nghĩa thời gian và chất lượng trước khi gộp dữ liệu ngoài. Bộ chạy nghiên cứu đọc nhật ký đã chuẩn bị trong `data/live_snapshots/`. Hồ sơ phân biệt thời điểm lấy mẫu, thời điểm nguồn và thời điểm nhận. Giá và khối lượng giữ đơn vị nguồn cho đến khi có bằng chứng xác minh. Bản chụp lưu định kỳ không khôi phục được chuỗi báo giá ở giữa.
+**macOS/Linux**
 
-## Diễn giải tài chính
+```sh
+python -m venv .venv
+.venv/bin/python -m pip install -r requirements-research.txt
+.venv/bin/python -m unittest discover -s tests -v
+```
 
-- **RV20** chia khối lượng quan sát cho trung bình 20 phiên hoàn tất trước đó. RV20 trong phiên là tạm tính và vẫn so với khối lượng tham chiếu cả ngày.
-- **Kịch bản thoát vị thế** chia 100.000 cp cho tích của khối lượng bình quân và tỷ lệ tham gia 5%. Đổi tỷ lệ sang 2,5% hoặc 10% làm số phiên ước tính tăng gấp đôi hoặc giảm một nửa.
-- **Quan sát độ sâu 60 giây** dùng phân vị 10% của độ sâu trước đó và tìm đợt thấp kéo dài ít nhất 15 giây. Các ngưỡng thí điểm cần được chốt trước khi đánh giá ngoài mẫu.
-- **Mô phỏng nhập tay** lấy giá tốt nhất phía đối diện trước. Giá bình quân tính trên lượng khớp. Mô phỏng dùng lượng hiển thị tại thời điểm chụp, chưa tính phí, hàng đợi, quy tắc lô hoặc phản ứng thị trường.
+Tệp `requirements-research.txt` cung cấp NumPy cho các kiểm thử nghiên cứu. Bộ kiểm thử dùng được trên bản clone sạch. Một số bài kiểm tra bản chụp SSI có thể được bỏ qua nếu thiếu dữ liệu riêng.
 
-H1 vẫn là `NOT_TESTED` cho đến khi đủ dữ liệu, có bằng chứng xác minh đơn vị SSI và khóa giao thức đánh giá ngoài mẫu. LiquidityLab phục vụ phân tích học thuật. [Phạm vi dữ liệu và phương pháp](docs/production-ssi-coverage.md)
+**Kiểm thử JavaScript và tạo bản dựng**
 
-## Thư viện và giấy phép
+```sh
+node --version
+node --test tests/*.test.cjs
+node scripts/build_vercel_demo.mjs
+```
 
-- [KaTeX](https://github.com/KaTeX/KaTeX) · [Giấy phép](web/vendor/katex/LICENSE.txt)
-- [Apache ECharts](https://echarts.apache.org/) · [Giấy phép](web/vendor/echarts-LICENSE.txt) · [Thông báo bản quyền](web/vendor/echarts-NOTICE.txt)
-- [Lightweight Charts](https://github.com/tradingview/lightweight-charts) · [Giấy phép](web/vendor/lightweight-charts-LICENSE.txt)
-- SSI FastConnect Python SDK (`ssi-sdk`). Xem phiên bản trong `requirements-ssi.txt`.
+Kiểm thử JavaScript đọc mã giao diện trong `web/`. Lệnh cuối tạo `public-demo/index.html` và các tệp tĩnh trong `public-demo/`. Vercel dùng thiết lập trong `vercel.json` để chạy lệnh này. API thị trường của bản web nằm trong `api/market-data.js`.
+
+## 5. Dữ liệu và các tệp chính
+
+| Tệp hoặc thư mục | Dùng để làm gì |
+| --- | --- |
+| `run.py`, `web/index.html` | Điểm vào của máy chủ và giao diện khi chạy cục bộ |
+| `src/finance.py`, `web/calculator-core.js` | Tính chỉ số nhập tay và mô phỏng quét sổ lệnh |
+| `scripts/build_vercel_demo.mjs`, `vercel.json`, `api/market-data.js` | Tạo bản dựng, cấu hình Vercel và phục vụ API thị trường |
+| `.github/workflows/` | Chạy kiểm thử và các quy trình thu, cập nhật hoặc bảo trì dữ liệu SSI |
+| `data_sample/catalog_fixture.json` | Danh mục giả lập dành cho kiểm thử |
+| `data/` | Bản chụp SSI và dữ liệu nghiên cứu cục bộ, lưu ngoài Git |
+| `config/`, `scripts/run_research.py` | Cấu hình nguồn và điểm vào đánh giá nghiên cứu ngoại tuyến |
+
+Giá và khối lượng trong phiên lấy từ SSI. Nến M15 được cập nhật theo mốc giao dịch, độc lập với việc thu sổ lệnh. Nến ở kỳ đang mở có thể dùng dữ liệu tạm tính, còn lịch sử cuối ngày chính thức được cập nhật riêng. Ai vận hành bộ thu SSI cần cài `requirements-ssi.txt` và thiết lập thông tin kết nối riêng theo `.env.example`. Các bước mở web, chạy máy chủ và nhập tay không cần khóa SSI. [Phạm vi dữ liệu và phương pháp](docs/production-ssi-coverage.md)
+
+Pipeline nghiên cứu `scripts/run_research.py` đọc sự kiện trong `data/live_snapshots/`. Chỉ khi đủ dữ liệu, xác minh đơn vị nguồn và khóa giao thức nghiên cứu thì mới chạy đánh giá và ghi `data/research/evaluation.json`. Nếu thiếu điều kiện, script trả danh sách lý do. Ví dụ nhập tay ở mục 3 tái lập được độc lập với pipeline này.
+
+## 6. Xử lý khi chạy cục bộ
+
+| Triệu chứng | Cách kiểm tra và xử lý |
+| --- | --- |
+| `python` không chạy hoặc mở Microsoft Store | Kiểm tra `python --version`. Trên Windows thử `py -3.12 --version` nếu đã cài Python 3.12. |
+| Trình duyệt không kết nối được | Giữ `run.py` đang chạy và dùng đúng địa chỉ máy chủ in trong terminal. |
+| Cổng 8792 đang được dùng | Chạy `python run.py --port 8793`, rồi mở [http://127.0.0.1:8793](http://127.0.0.1:8793). |
+| Trang lịch sử cục bộ thiếu dữ liệu SSI | Dùng bản web để xem dữ liệu đã công bố. Dùng mục **Kiểm tra công thức** để thử ví dụ nhập tay ngay trên bản clone. |
+
+LiquidityLab phục vụ phân tích học thuật. Giấy phép của các thư viện giao diện nằm cạnh mã đã đóng gói. [KaTeX](web/vendor/katex/LICENSE.txt) · [Apache ECharts](web/vendor/echarts-LICENSE.txt) · [Lightweight Charts](web/vendor/lightweight-charts-LICENSE.txt)

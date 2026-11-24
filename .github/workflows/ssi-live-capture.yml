@@ -1,9 +1,9 @@
-name: SSI · Thu sổ lệnh trực tiếp
+name: SSI Live Capture
 on:
   workflow_dispatch:
     inputs:
       session:
-        description: Buổi giao dịch SSI theo giờ Việt Nam
+        description: SSI trading session (Vietnam time)
         type: choice
         options: [morning, afternoon]
         default: morning
@@ -38,27 +38,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Cài thư viện SSI
+      - name: Install SSI SDK
         working-directory: ssi-capture
         run: python -m pip install -r requirements-ssi.txt
-      - name: Chuẩn bị nơi lưu dữ liệu nghiên cứu
+      - name: Prepare research release before capture
         continue-on-error: true
         working-directory: ssi-capture
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: python -m scripts.archive_capture_release --prepare
-      - name: Thu sổ lệnh
+      - name: Capture order book
         working-directory: ssi-capture
         run: python -m scripts.capture_order_book
-      - name: Lưu mẫu thô vào Releases
+      - name: Preserve raw research samples in Releases
         if: always()
         working-directory: ssi-capture
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: python -m scripts.archive_capture_release
-      - name: Lưu bản nén dự phòng
+      - name: Temporary compressed evidence backup
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -88,27 +88,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Cài thư viện SSI
+      - name: Install SSI SDK
         working-directory: ssi-capture
         run: python -m pip install -r requirements-ssi.txt
-      - name: Chuẩn bị nơi lưu dữ liệu nghiên cứu
+      - name: Prepare research release before capture
         continue-on-error: true
         working-directory: ssi-capture
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: python -m scripts.archive_capture_release --prepare
-      - name: Thu sổ lệnh
+      - name: Capture order book
         working-directory: ssi-capture
         run: python -m scripts.capture_order_book
-      - name: Lưu mẫu thô vào Releases
+      - name: Preserve raw research samples in Releases
         if: always()
         working-directory: ssi-capture
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: python -m scripts.archive_capture_release
-      - name: Lưu bản nén dự phòng
+      - name: Temporary compressed evidence backup
         if: always()
         uses: actions/upload-artifact@v4
         with:

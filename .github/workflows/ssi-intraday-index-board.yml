@@ -1,4 +1,4 @@
-name: SSI · Chỉ số và bảng giá trong phiên
+name: SSI Intraday Index and Board Summary
 on:
   workflow_dispatch:
   push:

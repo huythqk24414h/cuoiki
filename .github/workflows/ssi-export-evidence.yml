@@ -1,9 +1,9 @@
-name: SSI · Xuất dữ liệu đã lưu
+name: SSI Export Saved Evidence
 on:
   workflow_dispatch:
     inputs:
       date:
-        description: Ngày bản chụp đã lưu (YYYY-MM-DD)
+        description: Saved checkpoint date (YYYY-MM-DD)
         required: true
         default: '2026-11-17'
 permissions:

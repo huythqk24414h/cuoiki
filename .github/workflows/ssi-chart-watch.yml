@@ -1,4 +1,4 @@
-name: SSI · Giám sát biểu đồ
+name: SSI Chart Watch
 on:
   schedule:
     - cron: '11,26 2 * * 1-5'

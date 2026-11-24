@@ -4,7 +4,7 @@
 
 ## Dữ liệu và tái lập
 
-- `SSI · Lịch sử cuối ngày` và `SSI · Thu nến trong phiên` chạy trên GitHub-hosted runners với `SSI_PUBLISH_EOD=true`, khóa SSI và Redis đặt trong GitHub Secrets. Vercel đọc dữ liệu Redis theo mã. Dữ liệu mới xuất hiện mà không cần deploy lại.
+- `SSI Market History` và `SSI Intraday OHLCV` chạy trên GitHub-hosted runners với `SSI_PUBLISH_EOD=true`, khóa SSI và Redis đặt trong GitHub Secrets. Vercel đọc dữ liệu Redis theo mã. Dữ liệu mới xuất hiện mà không cần deploy lại.
 - Danh mục lấy `stockType=Stock` và thành viên VN30 trực tiếp từ SSI. Mã vắng trong danh mục được ghi là vắng mặt. Chỉ gọi là đã hết giao dịch khi SSI trả ngày cuối đã qua. Giữ lịch sử đã công bố của mã vắng mặt.
 - `SSI_EOD_SYMBOLS` và `SSI_INTRADAY_SYMBOLS` nhận danh sách phân cách dấu phẩy và nhóm `VN30`. Mặc định ưu tiên VN30, giữ thêm REE và SAM ở EOD. Mã ngoài VN30 có thể cấu hình theo từng lô. Chỉ áp dụng quy tắc nội ngày hiện tại cho HOSE. Giới hạn 80 mã EOD, 32 mã nội ngày mặc định. Ngân sách JSON EOD đang tham chiếu là 90 MB để còn dung lượng cho dữ liệu tạm khi cập nhật.
 - Workflow EOD làm mới vùng chồng lấn 10 ngày và gộp theo ngày. Các phiên bất hợp lệ được cách ly, giữ ngày bị loại trong metadata. Nếu phân trang hỏng hoặc dữ liệu xung đột, giữ dữ liệu đã lưu. Giá theo SSI, chính sách điều chỉnh chưa xác minh. Khi mã được tái sử dụng hoặc niêm yết lại, cần xác minh pháp nhân trước khi diễn giải lịch sử. SSI trả chuỗi VPL giai đoạn cũ từ 2008. Với niêm yết hiện tại, giới hạn chuỗi từ 13/05/2025 theo [thông báo của HOSE](https://statics.vinpearl.com/250506_VPL_CBTT%20vv%20nhan%20duoc%20TB%20ngay%20giao%20dich%20dau%20tien_1746529635.pdf).
