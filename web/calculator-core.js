@@ -1,4 +1,4 @@
-/* Pure manual-entry helpers; all authoritative finance calculations remain in Python. */
+/* Manual input, offline book metrics and display-only sweep scenarios. */
 (function (root, factory) {
   'use strict';
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -157,5 +157,25 @@
     };
   }
 
-  return Object.freeze({buildManualPayload,calculateManual,formatDecimal,cumulativeLevels,describeResult});
+  /** Sweep displayed levels for a whole-share quantity. Midpoint slippage is conditional on a full fill. */
+  function simulateSweep(book, side, quantity) {
+    const requested = Number(quantity);
+    if (!Number.isSafeInteger(requested) || requested <= 0) throw new Error('Nhập số cổ phiếu nguyên dương.');
+    if (!['buy', 'sell'].includes(side)) throw new Error('Chọn chiều mua hoặc bán.');
+    const levels = side === 'buy' ? book.asks : book.bids;
+    const midpoint = (Number(book.bids[0].price) + Number(book.asks[0].price)) / 2;
+    let remaining = requested, value = 0;
+    for (const level of levels.slice(0, 3)) {
+      const filled = Math.min(remaining, Number(level.quantity));
+      value += filled * Number(level.price);
+      remaining -= filled;
+      if (!remaining) break;
+    }
+    const filled = requested - remaining;
+    const vwap = filled ? value / filled : null;
+    const slippageBps = remaining ? null : (side === 'buy' ? vwap - midpoint : midpoint - vwap) / midpoint * 10000;
+    return {requested, filled, remaining, vwap, slippageBps, fillRatio:filled / requested};
+  }
+
+  return Object.freeze({simulateSweep,buildManualPayload,calculateManual,formatDecimal,cumulativeLevels,describeResult});
 }));

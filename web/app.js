@@ -146,6 +146,21 @@ function renderSnapshot(payload, result) {
 }
 
 function renderResult(result, payload) {
+  const sweepOutput = $('#sweep-result');
+  sweepOutput.textContent = '';
+  $('#sweep-run').onclick = () => {
+    try {
+      const sweep = calculator.simulateSweep(payload, $('#sweep-side').value, $('#sweep-quantity').value);
+      const format = value => value.toLocaleString('vi-VN', {maximumFractionDigits: 4});
+      const slippage = sweep.slippageBps == null ? 'Chưa đủ khối lượng để tính trượt giá toàn lệnh'
+        : 'Trượt giá so với giá giữa ' + format(sweep.slippageBps) + ' bps';
+      sweepOutput.textContent = 'Khớp mô phỏng ' + format(sweep.filled) + '/' + format(sweep.requested) +
+        ' cp (' + format(sweep.fillRatio * 100) + '%) · Còn thiếu ' + format(sweep.remaining) +
+        ' cp · VWAP phần khớp ' + (sweep.vwap == null ? '—' : format(sweep.vwap) + ' VND/cp') + ' · ' + slippage + '.';
+    } catch (error) {
+      sweepOutput.textContent = error.message;
+    }
+  };
   $('#result-values').replaceChildren();
   const fmt = calculator.formatDecimal;
   const values = [['Độ sâu mua', `${fmt(result.bid_depth_vnd,4)} VND`], ['Độ sâu bán', `${fmt(result.ask_depth_vnd,4)} VND`],
