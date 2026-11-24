@@ -1,10 +1,10 @@
 # LiquidityLab
 
-LiquidityLab is a read-only academic tool for comparing traded volume with displayed liquidity. It uses SSI FastConnect Data according to the instructor's updated requirement. The public web app shows OHLCV, indices, relative volume and saved order-book observations. The local manual calculator works with user-supplied books and simulates a buy or sell across up to three visible levels.
+Công cụ phân tích học thuật dùng SSI FastConnect Data theo yêu cầu của giảng viên. Web hiển thị giá, khối lượng, chỉ số, RV20 và bản chụp sổ lệnh. Công cụ nhập tay tính các chỉ số và mô phỏng quét tối đa ba mức giá.
 
-## Run and verify
+## Chạy và kiểm thử
 
-From this folder, use Python 3.12+ and a current Node.js runtime:
+Dùng Python 3.12 trở lên và Node.js. Trên Windows có thể mở bằng `MO_LIQUIDITY_LAB.cmd`. Sau khi chạy lệnh đầu, mở http://127.0.0.1:8792. Biểu mẫu demo dùng `LiquidityLab` / `123456789`.
 
 ```sh
 python run.py --port 8792
@@ -13,44 +13,55 @@ node --test tests/*.test.cjs
 node scripts/build_vercel_demo.mjs
 ```
 
-Open `http://127.0.0.1:8792`. The local server and calculator need only the Python standard library. On Windows, `MO_LIQUIDITY_LAB.cmd` also opens the app. `LiquidityLab` / `123456789` is the public demo form, with no user authentication or account access. A clean copy can run the calculator and synthetic tests. Historical SSI panels require the corresponding saved data folders. Missing-source panels must be read as unavailable.
+Bản tải sạch chạy được công cụ nhập tay và kiểm thử dùng dữ liệu giả lập. Các mục lịch sử cần bản chụp SSI tương ứng trong `data/`. Để thu dữ liệu bằng tài khoản được cấp quyền, cài `requirements-ssi.txt` và cấu hình theo `.env.example`. Các quy trình GitHub đọc thông tin kết nối từ GitHub Secrets. Máy khách SSI chỉ gọi các điểm cuối đọc dữ liệu trong `src/ssi_client.py`.
 
-For authorized SSI collection, install `requirements-ssi.txt` and configure the variables in `.env.example` through the environment or a private `.env`. The production workflows use GitHub Secrets and the public demo reads the market API on Vercel. REST collection is restricted to the five market-data endpoints in `src/ssi_client.py`; the SDK also authenticates and subscribes to the SSI DATA feed.
+## Thử nhập sổ lệnh ngày 25/11/2026
 
-## Data and provenance
+Vào **Sổ lệnh → Nhập sổ lệnh**, đặt tên **FPT-MAU**. Đây là ví dụ giả lập, giá tính bằng đồng/cổ phiếu, khối lượng tính bằng cổ phiếu. Có thể để trống thời gian để dùng giờ bấm tính.
 
-| Component | What it uses |
+| Mức | Giá mua | KL mua | Giá bán | KL bán |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 47000 | 200 | 47050 | 200 |
+| 2 | 46950 | 300 | 47100 | 300 |
+| 3 | 46900 | 500 | 47150 | 500 |
+
+Bấm **Tính toán**. Chênh lệch giá tốt nhất là 50 đồng/cp, giá giữa 47.025 đồng/cp. Mở **Mô phỏng quét tối đa ba mức**, chọn **Mua** và thử hai lượng:
+
+- **300 cp**. Khớp đủ, giá bình quân 47.066,67 đồng/cp, trượt giá khoảng 8,86 bps.
+- **1.200 cp**. Khớp 1.000 cp (83,33%), còn 200 cp. Giá bình quân phần khớp 47.115 đồng/cp. Công cụ bỏ trống trượt giá toàn lệnh.
+
+Nếu thử bằng sổ FPT thực tế, chép ba mức mua và bán tại cùng thời điểm, chỉ quy đổi sau khi xác nhận đơn vị nguồn.
+
+## Dữ liệu và nguồn gốc
+
+| Thư mục | Nội dung |
 | --- | --- |
-| `src/`, `scripts/` | SSI mapping and validation, candle publication, book capture, finance and research |
-| `web/`, `api/`, `demo/` | Local and Vercel UI, read-only production API, browser adapter |
-| `config/` | Historical snapshot pointer, pilot protocol, SSI unit-contract template |
-| `data_sample/` | Synthetic SSI-shaped catalogue for HTTP/SSE tests only |
-| `data/` | Local SSI snapshots and research archives outside Git |
+| `src/`, `scripts/` | Đọc và kiểm tra SSI, công bố nến, thu sổ lệnh, tính toán và nghiên cứu |
+| `web/`, `api/`, `demo/` | Giao diện cục bộ và Vercel, API chỉ đọc và phần kết nối trình duyệt |
+| `config/` | Tham chiếu bản chụp lịch sử, giao thức thí điểm và mẫu xác minh đơn vị SSI |
+| `data_sample/` | Danh mục giả lập theo cấu trúc SSI dành cho kiểm thử HTTP/SSE |
+| `data/` | Bản chụp SSI và hồ sơ nghiên cứu lưu ngoài Git |
 
-Production OHLCV uses closed SSI minute observations. M15 refreshes at market checkpoints and the chart aggregates other periods from observed data. Daily and longer charts may include a provisional current observation, and the official EOD history is published separately. The chart watch has an independent schedule. The book collector preserves one-second sampled states and SSI event logs where available. A saved checkpoint carries the most recent observed books, with lower time granularity than those logs.
-
-Check any saved archive directory that also contains its manifest by running:
+Biểu đồ dùng nến một phút đã đóng từ SSI. Nến M15 làm mới theo mốc giao dịch. Các khung dài hơn có thể gồm kỳ đang mở. Lịch sử cuối ngày chính thức được công bố riêng. Giám sát biểu đồ có lịch độc lập với bộ thu sổ lệnh. Bộ thu ghi mẫu mỗi giây và lưu nhật ký sự kiện SSI khi có.
 
 ```sh
 python -m scripts.audit_book_archives data/research_exports
 ```
 
-The archive audit checks hashes and reports per-symbol coverage in continuous trading windows. Collector freshness and session flags do not certify SSI units or research eligibility. Keep externally sourced datasets separate until provenance, permitted use, timestamp semantics and quality have been verified. SSI data may be subject to redistribution terms.
+Lệnh trên kiểm mã băm và báo độ phủ theo mã trong phiên khớp liên tục. Cần xác minh nguồn gốc, quyền sử dụng, ý nghĩa thời gian và chất lượng trước khi gộp dữ liệu ngoài. Bộ chạy nghiên cứu đọc nhật ký đã chuẩn bị trong `data/live_snapshots/`. Hồ sơ phân biệt thời điểm lấy mẫu, thời điểm nguồn và thời điểm nhận. Giá và khối lượng giữ đơn vị nguồn cho đến khi có bằng chứng xác minh. Bản chụp lưu định kỳ không khôi phục được chuỗi báo giá ở giữa.
 
-The offline research runner currently reads event logs prepared in `data/live_snapshots/`. The archive inventory remains a separate check before selecting those inputs. The archive contains both capture timestamps (`sampled_at`, one-second sampling grid) and, where available, source and receive timestamps (`event_time`, `received_at`). Quote prices and quantities remain in SSI source units until the unit contract has supporting evidence. Checkpoints cannot recover the quote sequence between saved times.
+## Diễn giải tài chính
 
-## Financial interpretation
+- **RV20** chia khối lượng quan sát cho trung bình 20 phiên hoàn tất trước đó. RV20 trong phiên là tạm tính và vẫn so với khối lượng tham chiếu cả ngày.
+- **Kịch bản thoát vị thế** chia 100.000 cp cho tích của khối lượng bình quân và tỷ lệ tham gia 5%. Đổi tỷ lệ sang 2,5% hoặc 10% làm số phiên ước tính tăng gấp đôi hoặc giảm một nửa.
+- **Quan sát độ sâu 60 giây** dùng phân vị 10% của độ sâu trước đó và tìm đợt thấp kéo dài ít nhất 15 giây. Các ngưỡng thí điểm cần được chốt trước khi đánh giá ngoài mẫu.
+- **Mô phỏng nhập tay** lấy giá tốt nhất phía đối diện trước. Giá bình quân tính trên lượng khớp. Mô phỏng dùng lượng hiển thị tại thời điểm chụp, chưa tính phí, hàng đợi, quy tắc lô hoặc phản ứng thị trường.
 
-- Relative volume divides current observed volume by the previous 20 completed sessions' mean. Values such as 2× and 0.5× identify double or half the recent reference for description. An intraday numerator is provisional and is compared with full-day historical volume.
-- The exit scenario uses 100,000 shares and participation of 5% as explicit scenario inputs. Estimated sessions equal shares divided by the product of average volume and participation. At 2.5%, 5% or 10% the scenario respectively gives twice, the same or half the 5% estimate for a fixed average volume. It does not measure displayed depth.
-- The 60-second observation rule uses a prior 10th-percentile depth reference and checks whether low depth persists for 15 seconds. These are pilot choices for a low-tail and a persistence filter. Candidate quantiles and time windows must be compared on development days and finalized before evaluating reserved days. The protocol and SSI unit contract have separate gates.
-- Manual sweep uses the best displayed opposite-side prices first. VWAP uses the filled quantity. The UI pairs full-order midpoint slippage with snapshot fill fraction and suppresses full-order slippage when shares remain. It does not estimate fill frequency, queue priority, fees, round-lot constraints or the market response to a real order.
+H1 vẫn là `NOT_TESTED` cho đến khi đủ dữ liệu, có bằng chứng xác minh đơn vị SSI và khóa giao thức đánh giá ngoài mẫu. LiquidityLab phục vụ phân tích học thuật. [Phạm vi dữ liệu và phương pháp](docs/production-ssi-coverage.md)
 
-The production data notes and limitations are in [docs/production-ssi-coverage.md](docs/production-ssi-coverage.md). Treat the application as an academic analysis tool, not investment advice. The research evaluation remains a pilot and H1 is `NOT_TESTED` until the data, unit contract and locked protocol support a defensible out-of-sample comparison.
+## Thư viện và giấy phép
 
-### Dependencies and notices
-
-- [KaTeX](https://github.com/KaTeX/KaTeX), [bundled licence](web/vendor/katex/LICENSE.txt)
-- [Apache ECharts](https://echarts.apache.org/), [bundled licence](web/vendor/echarts-LICENSE.txt) and [NOTICE](web/vendor/echarts-NOTICE.txt)
-- [Lightweight Charts](https://github.com/tradingview/lightweight-charts), [bundled licence](web/vendor/lightweight-charts-LICENSE.txt) for the retained vendor file
-- SSI FastConnect Python SDK (`ssi-sdk`), version in `requirements-ssi.txt`. Consult the provider for SDK and data usage terms.
+- [KaTeX](https://github.com/KaTeX/KaTeX) · [Giấy phép](web/vendor/katex/LICENSE.txt)
+- [Apache ECharts](https://echarts.apache.org/) · [Giấy phép](web/vendor/echarts-LICENSE.txt) · [Thông báo bản quyền](web/vendor/echarts-NOTICE.txt)
+- [Lightweight Charts](https://github.com/tradingview/lightweight-charts) · [Giấy phép](web/vendor/lightweight-charts-LICENSE.txt)
+- SSI FastConnect Python SDK (`ssi-sdk`). Xem phiên bản trong `requirements-ssi.txt`.

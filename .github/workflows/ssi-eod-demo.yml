@@ -1,4 +1,4 @@
-name: SSI Market History
+name: SSI · Lịch sử cuối ngày
 on:
   push:
     branches: [main]
@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       full_backfill:
-        description: Rebuild all series from the first Vietnam trading date
+        description: Dựng lại chuỗi từ ngày giao dịch đầu tiên
         type: boolean
         default: false
       batch_size:
-        description: Maximum new daily series this run (1–40)
+        description: Số chuỗi ngày mới trong lượt này (1–40)
         type: number
         default: 8
   schedule:

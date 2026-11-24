@@ -1,15 +1,15 @@
-name: SSI Collector Health
+name: SSI · Kiểm tra bộ thu
 on:
   schedule:
     - cron: '13,43 0-11 * * 1-5'
   workflow_dispatch:
     inputs:
       follow_session:
-        description: Keep checking chart collectors for this trading session
+        description: Tiếp tục kiểm tra bộ thu biểu đồ trong phiên
         type: boolean
         default: false
   workflow_run:
-    workflows: ['SSI Live Capture', 'SSI Intraday OHLCV', 'SSI Intraday Index and Board Summary', 'SSI Market History']
+    workflows: ['SSI · Thu sổ lệnh trực tiếp', 'SSI · Thu nến trong phiên', 'SSI · Chỉ số và bảng giá trong phiên', 'SSI · Lịch sử cuối ngày']
     types: [completed]
 permissions:
   contents: read

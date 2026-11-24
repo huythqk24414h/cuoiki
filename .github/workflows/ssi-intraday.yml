@@ -1,4 +1,4 @@
-name: SSI Intraday OHLCV
+name: SSI · Thu nến trong phiên
 on:
   push:
     branches: [main]
@@ -10,11 +10,11 @@ on:
   workflow_dispatch:
     inputs:
       batch_size:
-        description: Maximum new intraday series this run (up to the symbol cap)
+        description: Số chuỗi nội ngày mới tối đa trong lượt này
         type: number
         default: 8
       follow_session:
-        description: Refresh every 15 minutes until the market closes
+        description: Cập nhật mỗi 15 phút đến khi đóng cửa
         type: boolean
         default: false
   schedule:

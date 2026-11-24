@@ -1,4 +1,4 @@
-name: LiquidityLab offline checks
+name: LiquidityLab · Kiểm thử ngoại tuyến
 on:
   workflow_dispatch:
   push:
@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Run dashboard tests
+      - name: Kiểm thử giao diện
         run: node --test tests/*.test.cjs
   python:
     runs-on: ubuntu-latest
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install research test dependencies
+      - name: Cài thư viện kiểm thử nghiên cứu
         run: python -m pip install -r requirements-research.txt
-      - name: Run Python checks without local SSI archives
+      - name: Kiểm thử Python trên bản sạch
         run: python -m unittest discover -s tests -v

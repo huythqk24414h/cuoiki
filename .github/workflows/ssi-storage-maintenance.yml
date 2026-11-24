@@ -1,4 +1,4 @@
-name: SSI Storage Maintenance
+name: SSI · Bảo trì lưu trữ
 on:
   workflow_dispatch:
 permissions:
