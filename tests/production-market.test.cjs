@@ -206,7 +206,7 @@ test('a depth flag remains as a dated prior observation after reload', async () 
     document.querySelector('#review-session').parent=root;
     const DateAt=class extends Date {static now(){return now;}};
     await runInNewContext(readFileSync(require.resolve('../web/vn30-brief.js'),'utf8'),{
-      document,window:{addEventListener(){}},AbortSignal,location:{hash:'#monitor'},setInterval(){},Date:DateAt,
+      document,window:{StaticLiquidity:true,addEventListener(){}},AbortSignal,location:{hash:'#monitor'},setInterval(){},Date:DateAt,
       localStorage:{getItem:key=>saved.get(key),setItem:(key,value)=>saved.set(key,value)},
       fetch:async url=>({ok:true,json:async()=>url.includes('kind=live')?
         {updated_at:new Date(start).toISOString(),depth_windows:{FPT:{state,updated_at:new Date(start).toISOString()}}}:{symbols:{},index_memberships:{VN30:[]}}}),
@@ -245,7 +245,7 @@ test('VN30 briefing advances with intraday candles while official EOD stays on t
   let volume='250',last='2026-11-18T11:30:00+07:00';
   const intervals=[];
   await runInNewContext(readFileSync(require.resolve('../web/vn30-brief.js'),'utf8'),{
-    document,window:{addEventListener(){}},AbortSignal,location:{hash:'#monitor'},Date:DateAt,
+    document,window:{StaticLiquidity:true,addEventListener(){}},AbortSignal,location:{hash:'#monitor'},Date:DateAt,
     setInterval(callback,ms){intervals.push({callback,ms});},
     localStorage:{getItem(){return null;},setItem(){}},
     fetch:async url=>({ok:true,json:async()=>{

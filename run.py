@@ -96,6 +96,8 @@ class Handler(BaseHTTPRequestHandler):
                  '/themes.js': ('themes.js', 'text/javascript; charset=utf-8'),
                  '/calculator-core.js': ('calculator-core.js', 'text/javascript; charset=utf-8'),
                  '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
+                 '/symbol-analysis.js': ('symbol-analysis.js', 'text/javascript; charset=utf-8'),
+                 '/vn30-brief.js': ('vn30-brief.js', 'text/javascript; charset=utf-8'),
                  '/eod-ui.js': ('eod-ui.js', 'text/javascript; charset=utf-8'),
                  '/theme-tokens.css': ('theme-tokens.css', 'text/css; charset=utf-8'),
                  '/style.css': ('style.css', 'text/css; charset=utf-8'),

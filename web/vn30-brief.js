@@ -2,6 +2,11 @@
 (async () => {
   const status = document.querySelector('#review-session');
   if (!status) return;
+  if (typeof window.StaticLiquidity === 'undefined' && document.querySelector('#vn30-review')) {
+    status.textContent = 'Bản tin tổng hợp VN30 dùng dữ liệu công bố trên phiên bản web.';
+    document.querySelector('#review-export').disabled = true;
+    return;
+  }
   status.textContent = 'Đang đọc dữ liệu SSI…';
   const control = document.querySelector('#review-export');
   control.disabled = true;

@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 from src.ssi_client import SSIReadonly, date_range, safe_error, ALLOWED
 from src.ssi_snapshot import validate_ssi_snapshot
+from src import history_store
 from src.market import market_payload, historical_alerts, FOLDER
 
 
@@ -42,6 +43,11 @@ class SSIClientTests(unittest.TestCase):
         self.assertNotIn('sensitive',json.dumps(safe_error(error)))
 
 
+require_snapshot = unittest.skipUnless(
+    (FOLDER / "manifest.json").exists(), "Saved SSI snapshot unavailable; synthetic tests still run")
+
+
+@require_snapshot
 class SSISnapshotTests(unittest.TestCase):
     def test_actual_snapshot_and_every_raw_invariant(self):
         result=validate_ssi_snapshot(FOLDER)
@@ -69,6 +75,10 @@ class SSISnapshotTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:self.assertFalse(validate_ssi_snapshot(tmp)['passed'])
 
 
+@require_snapshot
+@unittest.skipUnless(
+    (history_store.PROJECT / "data/ssi_history_20220101_20261105/quality.json").exists(),
+    "Saved expanded SSI history unavailable")
 class MarketIntegrationTests(unittest.TestCase):
     def test_ssi_api_same_last_raw_prices_and_value(self):
         payload,code=market_payload('/api/market/ohlcv','symbol=SSI&range=ALL')

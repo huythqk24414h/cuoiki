@@ -7,8 +7,12 @@ from src.insights import fact_sheet
 
 class RecoveryTests(unittest.TestCase):
     def test_rest_alias_cannot_break_stream_subscription(self):
-        with patch.dict('os.environ',{'SSI_STREAM_SYMBOLS':'SSI,VN50 GROWTH'}):
-            self.assertEqual(stream_symbols(),['SSI'])
+        directory = {"securities": [{"symbol": "SSI"}, {"symbol": "VN50 GROWTH"}]}
+        with patch.dict("os.environ", {"SSI_STREAM_SYMBOLS": "SSI,VN50 GROWTH"}):
+            with patch("src.universe.catalog", return_value=directory):
+                self.assertEqual(stream_symbols(), ["SSI"])
+            with patch("src.universe.catalog", return_value={"securities": []}):
+                self.assertEqual(stream_symbols(), [])
         stream=DataStream();self.assertFalse(stream.watch('VN50 GROWTH'));self.assertTrue(stream.watch('SSI'))
 
     def test_partial_payload_replaces_previous_book_and_stays_unverified(self):

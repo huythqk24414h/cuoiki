@@ -1,0 +1,16 @@
+{
+  "fixture_type": "synthetic_test_only",
+  "securities": [
+    {
+      "symbol": "TEST",
+      "symbolNameVi": "Mã thử nghiệm",
+      "board": "HOSE",
+      "stockType": "Stock"
+    }
+  ],
+  "index_memberships": {
+    "VN30": [
+      "TEST"
+    ]
+  }
+}

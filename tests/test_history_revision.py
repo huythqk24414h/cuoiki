@@ -9,8 +9,13 @@ from src import history_store,universe
 from src.market import market_payload
 from run import Handler
 
-@unittest.skipUnless((history_store.PROJECT/'config/history_active.json').exists(),'Historical revision not installed')
+requires_history = unittest.skipUnless(
+    (history_store.PROJECT / "data/ssi_history_20220101_20261105/quality.json").exists(),
+    "Saved expanded SSI history unavailable")
+
+
 class HistoricalRevisionTests(unittest.TestCase):
+    @requires_history
     def test_active_revision_bounds_and_partial_rows_exclude_quarantine(self):
         folder,q=history_store.active()
         self.assertEqual(q['validation_status'],'PASS')
@@ -42,6 +47,7 @@ class HistoricalRevisionTests(unittest.TestCase):
                 with self.assertRaises(ValueError):history_store.active()
         history_store._cache.clear()
 
+    @requires_history
     def test_real_http_welcome_assets_5y_series_and_index(self):
         server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()

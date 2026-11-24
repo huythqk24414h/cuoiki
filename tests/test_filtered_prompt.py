@@ -4,6 +4,8 @@ from datetime import datetime
 from decimal import Decimal,localcontext
 from http.server import ThreadingHTTPServer
 from urllib.request import urlopen
+from pathlib import Path
+from unittest.mock import patch
 from src.eod_analytics import enrich_rows
 from src.ssi_stream import book_metrics,VN
 from src.quote_board import board_row
@@ -40,9 +42,14 @@ class SSELocalTests(unittest.TestCase):
         server=ThreadingHTTPServer(('127.0.0.1',0),Handler);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         base='http://127.0.0.1:'+str(server.server_port)
         try:
-            with urlopen(base+'/api/market/board-stream?scope=INDEX:VN30&size=30',timeout=15) as r:
+            sample = Path(__file__).resolve().parents[1] / "data_sample/catalog_fixture.json"
+            catalog = json.loads(sample.read_text(encoding="utf-8"))
+            self.assertEqual(catalog["fixture_type"], "synthetic_test_only")
+            with patch("src.universe.catalog", return_value=catalog), urlopen(
+                base + "/api/market/board-stream?scope=INDEX:VN30&size=30", timeout=15
+            ) as r:
                 self.assertIn('text/event-stream',r.headers['Content-Type']);self.assertEqual(r.readline().decode().strip(),'event: board')
-                data=json.loads(r.readline().decode()[6:]);self.assertLessEqual(len(data['rows']),30);self.assertEqual(data['scope'],'INDEX:VN30')
+                data=json.loads(r.readline().decode()[6:]);self.assertEqual([row['symbol'] for row in data['rows']], ['TEST']);self.assertEqual(data['scope'],'INDEX:VN30')
             for path in ('/formula.js','/vendor/katex/katex.js'):
                 with urlopen(base+path) as r:self.assertEqual(r.status,200)
         finally:server.shutdown();server.server_close();thread.join()
