@@ -180,11 +180,22 @@ window.StaticLiquidity = (() => {
     const members=(await marketDirectory())?.index_memberships?.VN30||[];
     const lower=q.get('period')!=='recent'&&(path==='index'||members.includes(symbol)) ? '2000-07-28' : '2022-01-01';
     const preview=q.get('preview')==='1'&&path==='series';
+    const includeReference=preview&&q.get('reference')==='1';
     const today=vietnamDay();
-    let open=null;
-    if(preview&&(q.get('range')!=='CUSTOM'||((!q.get('to')||q.get('to')>=today)&&(!q.get('from')||q.get('from')<=today)))&&rows.at(-1)?.date<today){
-      const intraday=await load('intraday',symbol,'15m');
-      open=openSession(rows,intraday?.rows||[],symbol,today);
+    let open=null,reference=null,intradayUnavailable=false;
+    const canPreview=preview&&(q.get('range')!=='CUSTOM'||((!q.get('to')||q.get('to')>=today)&&(!q.get('from')||q.get('from')<=today)))&&rows.at(-1)?.date<today;
+    if(canPreview||includeReference){
+      const intraday=await load('intraday',symbol,'15m').catch(error=>{
+        if(!includeReference)throw error;
+        intradayUnavailable=true;
+        return null;
+      });
+      const bars=intraday?.rows||[];
+      if(canPreview)open=openSession(rows,bars,symbol,today);
+      if(includeReference&&!open){
+        const lastDay=bars.map(bar=>bar.closed_at?.slice(0,10)).filter(day=>day&&day<=today).sort().at(-1);
+        if(lastDay)reference=openSession(rows.filter(row=>row.date<lastDay),bars,symbol,lastDay);
+      }
     }
     rows=rows.filter(row=>row.date>=lower);
     const filter=q.get('range');
@@ -200,6 +211,7 @@ window.StaticLiquidity = (() => {
     const omitted=data.symbols[symbol]?.quarantined_dates?.length || 0;
     return {available:true,rows:aggregate(rows,resolution),summary,resolution,revision:version,
       ...(preview?{analysis_rows:aggregate(open?[...rows,open]:rows,resolution),open_session:open}:{}),
+      ...(includeReference?{intraday_reference:reference,intraday_unavailable:intradayUnavailable}:{}),
       last_available_session:summary?.date,message:(data.symbols[symbol]||saved||summary)?null:'Mã này chưa có lịch sử SSI được nạp.',unit_status:'Đơn vị nguồn SSI'+(omitted ? ' · '+omitted+' phiên OHLCV bị cách ly' : '')};
   }
   function boardMatches(row, q, members) {
@@ -432,7 +444,7 @@ window.StaticLiquidity = (() => {
       const eligible=selected.filter(finite);
       const events=eligible.filter(row=>Number(row.relative_volume20)>=2);
       const list=q.get('view')==='sessions'?selected:events;
-      return {status:'evaluated',evaluated_observations:eligible.length,
+      return {status:selected.length?'evaluated':'no_sessions',evaluated_observations:eligible.length,
         observations:selected.length,event_count:events.length,revision:series.revision,
         first_session:selected[0]?.date,last_session:selected.at(-1)?.date,
         rows:[...list].reverse().map(row=>({

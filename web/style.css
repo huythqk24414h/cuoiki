@@ -161,6 +161,19 @@ input,select,textarea{color-scheme:light}.demo-login{width:min(480px,calc(100vw 
 .welcome-screen img{filter:brightness(1.04);transform:translateZ(0)}
 .intraday-chart{width:100%;height:440px;min-height:300px}
 
+#book-chart:not(:has(.professional-chart,.chart-frame)){min-height:0;padding:10px 0}
+#book-chart .professional-chart{max-width:100%}
+.rv20-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0 0 16px}
+.rv20-summary .card{margin:0}
+.rv20-summary p{margin:8px 0}
+.rv20-result{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.rv20-result strong{font-size:1.6rem;font-variant-numeric:tabular-nums}
+.rv20-result .tag[data-level="high"]{box-shadow:inset 3px 0 var(--color-negative)}
+.rv20-result .tag[data-level="watch"]{box-shadow:inset 3px 0 var(--color-primary)}
+.depth-window-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 18px}
+.depth-window-facts[hidden]{display:none}
+@media(max-width:700px){.rv20-summary{grid-template-columns:minmax(0,1fr)}}
+
 /* The market filters stay on one row. Narrow screens can scroll the controls. */
 .global-market > .toolbar {
   flex-wrap: nowrap;

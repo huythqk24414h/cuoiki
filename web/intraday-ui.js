@@ -9,14 +9,15 @@
  const note=document.createElement('p');note.textContent='Tự kiểm tra local mỗi 5 giây; tải SSI tối đa mỗi 60 giây theo mã. Nến đang hình thành có thể đổi. 4H tách nghỉ trưa nên có thể thiếu kỳ. Giá/KL giữ đơn vị nguồn. Không dùng nến để dựng sổ lệnh.';
  const dateNote=document.createElement('p');dateNote.className='helper';dateNote.textContent='Nến nội phiên theo mã, khung nến và bộ lọc ngày phía trên.';
  card.append(title,select,status,dateNote,plot,note);section.insertBefore(card,section.children[1]);
- const warning=document.createElement('article');warning.className='card';const wt=document.createElement('h2');wt.textContent='Độ sâu bên mua · cửa sổ quan sát 60 giây';const ws=document.createElement('p');const wn=document.createElement('p');wn.textContent=window.StaticLiquidity?
-  'Lấy mẫu sổ lệnh SSI mỗi giây. So độ sâu ba mức mua với phân vị 10% từ ít nhất 100 mẫu trước đó. Một đợt thấp cần kéo dài ít nhất 15 giây trong cửa sổ 60 giây. Kết quả chỉ dùng để quan sát, theo đơn vị nguồn.':
-  'Ghi mẫu mỗi giây khi quy ước SSI đã xác minh. Xác nhận sau 60 giây liệu độ sâu thấp kéo dài 15 giây.';
- const windowEvidence=document.createElement('details');windowEvidence.hidden=true;
- const evidenceTitle=document.createElement('summary');evidenceTitle.textContent='Xem bằng chứng của cửa sổ 60 giây';
- const evidenceData=document.createElement('dl');evidenceData.className='source-list';
- windowEvidence.append(evidenceTitle,evidenceData);
- warning.append(wt,ws,windowEvidence,wn);alerts.insertBefore(warning,alerts.children[1]);
+ const warning=document.createElement('article');warning.className='card';warning.id='depth-observation';
+ const wt=document.createElement('h2');wt.textContent='Độ sâu bên mua · quan sát 60 giây';
+ const ws=document.createElement('p');ws.setAttribute('role','status');ws.textContent='Đang đọc mẫu SSI…';
+ const evidenceData=document.createElement('dl');evidenceData.className='source-list depth-window-facts';evidenceData.hidden=true;
+ const wn=document.createElement('p');wn.className='helper';
+ wn.textContent='Quy tắc quan sát dùng phân vị 10% của tối thiểu 100 mẫu trước cửa sổ và yêu cầu độ sâu thấp kéo dài ít nhất 15 giây. H1 chưa được kiểm định ngoài mẫu.';
+ const bookLink=document.createElement('a');bookLink.href='#book';bookLink.textContent='Xem sổ lệnh SSI của mã';
+ warning.append(wt,ws,evidenceData,wn,bookLink);alerts.insertBefore(warning,alerts.children[1]);
+ let warningKey;
  let chart=null,busy=false;const vn=d=>d?new Date(d).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}):'chưa có';
  const dailyPlot=document.querySelector('#price-chart');
  const dailyCard=dailyPlot.closest('.history-card');
@@ -120,32 +121,32 @@
    }else{
     const r=await request('/api/market/depth-warning?'+new URLSearchParams({symbol}));
     if(symbol!==(window.MarketState.value.symbol||'SSI')||location.hash!=='#alerts')return;
-    ws.textContent=r.preview?[
-      symbol,r.state,`${r.valid_60s}/60 giây gần nhất có mẫu đạt kiểm tra`,
-      r.bid_depth!=null?'Độ sâu mua '+Number(r.bid_depth).toLocaleString('vi-VN')+' ('+r.unit+')':null,
-      r.threshold!=null?'Ngưỡng '+Number(r.threshold).toLocaleString('vi-VN'):null,
-      r.stale?'Đang hiển thị lần đo cuối '+vn(r.updated_at):'Cập nhật '+vn(r.updated_at),
-      r.reason||null,
-    ].filter(Boolean).join(' · '):
-      [r.symbol,r.state,r.samples?`${r.valid_samples}/${r.samples} mẫu hợp lệ`:null,
-       r.reason||r.method,r.snapshot_at?'Mốc bộ thu sổ lệnh '+vn(r.snapshot_at):null].filter(Boolean).join(' · ');
-    windowEvidence.hidden=!r.preview;
-    if(r.preview){
-      const fields=[
-        ['Cửa sổ đánh giá',r.anchor_time&&r.observed_until?vn(r.anchor_time)+' → '+vn(r.observed_until):'Chưa đủ điều kiện đánh giá'],
-        ['Mẫu dùng để tính ngưỡng',r.baseline_n!=null?r.baseline_n+' mẫu trước cửa sổ':'Chưa đủ mẫu cơ sở'],
-        ['Mẫu đạt kiểm tra trong 60 giây gần nhất',r.valid_60s+'/60'],
-        ['Kết quả',r.state],
-        ['Lần đo độ sâu cuối',vn(r.updated_at)],
-        ['Mốc bộ thu sổ lệnh',vn(r.snapshot_at)],
-      ];
-      evidenceData.replaceChildren(...fields.map(([key,value])=>{
-        const group=document.createElement('div'),label=document.createElement('dt'),content=document.createElement('dd');
-        label.textContent=key;content.textContent=value;group.append(label,content);return group;
-      }));
-    }
+    const unit=r.unit||'';
+    const amount=value=>value==null?'—':Number(value).toLocaleString('vi-VN');
+    const mode=r.preview?(r.stale?'Dữ liệu đã lưu':'Mẫu vừa nhận'):'SSI DATA';
+    const headline=[symbol,mode,r.state,r.reason].filter(Boolean).join(' · ');
+    const fields=[
+      ['Cửa sổ quan sát',r.anchor_time&&r.observed_until?vn(r.anchor_time)+' → '+vn(r.observed_until)+' ICT':'Chưa hình thành dải đánh giá'],
+      ['Mẫu đạt kiểm tra',r.valid_60s!=null&&r.samples?`${r.valid_60s}/${Math.min(r.samples,60)} mẫu gần nhất`:r.samples?`${r.valid_samples}/${r.samples} mẫu`:'Chưa có mẫu để chấm'],
+      ['Độ sâu mua ở mẫu cuối',r.bid_depth!=null?`${amount(r.bid_depth)} · ${unit}`:'—'],
+      ['Ngưỡng quan sát',r.threshold!=null?`${amount(r.threshold)} · ${unit} · ${r.baseline_n} mẫu cơ sở`:'Chưa đủ mẫu cơ sở'],
+      ['Mốc bộ thu SSI',r.snapshot_at||r.updated_at?vn(r.snapshot_at||r.updated_at)+' ICT':'Chưa có'],
+    ];
+    const key=JSON.stringify([headline,fields]);
+    if(warningKey===key)return;
+    warningKey=key;
+    ws.textContent=headline;
+    evidenceData.hidden=false;
+    evidenceData.replaceChildren(...fields.map(([key,value])=>{
+      const group=document.createElement('div'),label=document.createElement('dt'),content=document.createElement('dd');
+      label.textContent=key;content.textContent=value;group.append(label,content);return group;
+    }));
    }
-  }catch(e){(page==='analysis'?status:ws).textContent='Chưa đọc được dữ liệu: '+e.message;}finally{busy=false;}
+  }catch(e){
+    if(location.hash!=='#'+page||symbol!==(window.MarketState.value.symbol||'SSI'))return;
+    (page==='analysis'?status:ws).textContent='Chưa đọc được dữ liệu SSI: '+e.message;
+    if(page==='alerts'){warningKey=null;evidenceData.hidden=true;}
+  }finally{busy=false;}
  }
  select.addEventListener('change',update);window.addEventListener('hashchange',update);window.addEventListener('market-state-change',update);window.addEventListener('resize',()=>chart?.resize());setInterval(update,ChartKit.refreshMs());update();
  if(window.StaticLiquidity)setInterval(()=>{if(location.hash==='#alerts')update();},5000);

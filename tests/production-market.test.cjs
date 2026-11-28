@@ -187,6 +187,21 @@ test('analysis preview adds source value and partial metrics without changing of
   assert.ok(Math.abs(preview.open_session.volatility20_pct-Math.sqrt(5))<1e-12);
   delete bars[1].source_value;
   assert.equal((await read('resolution=1D&preview=1')).open_session.source_value_vnd,null);
+
+  // A saved M15 session uses only preceding EOD sessions in its denominator.
+  history.unshift({...history[0],date:day(-21)});
+  history.at(-1).volume_shares=2000;
+  for(const bar of bars){
+    bar.timestamp=bar.timestamp.replace(today,day(-1));
+    bar.closed_at=bar.closed_at.replace(today,day(-1));
+  }
+  const saved=await read('resolution=1D&preview=1&reference=1');
+  assert.equal(saved.open_session,null);
+  assert.equal(saved.summary.volume_shares,2000);
+  assert.equal(saved.intraday_reference.date,day(-1));
+  assert.equal(saved.intraday_reference.volume_avg20_previous,50);
+  assert.equal(saved.intraday_reference.relative_volume20,1);
+  assert.equal((await read('resolution=1D&preview=1')).intraday_reference,undefined);
 });
 
 test('a depth flag remains as a dated prior observation after reload', async () => {
