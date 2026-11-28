@@ -171,6 +171,8 @@ input,select,textarea{color-scheme:light}.demo-login{width:min(480px,calc(100vw 
 .rv20-result .tag[data-level="high"]{box-shadow:inset 3px 0 var(--color-negative)}
 .rv20-result .tag[data-level="watch"]{box-shadow:inset 3px 0 var(--color-primary)}
 .depth-window-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 18px}
+.depth-window-facts>div{display:block}
+.depth-window-facts dd{margin:4px 0 0;text-align:left;font-variant-numeric:tabular-nums}
 .depth-window-facts[hidden]{display:none}
 @media(max-width:700px){.rv20-summary{grid-template-columns:minmax(0,1fr)}}
 
